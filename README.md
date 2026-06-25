@@ -277,3 +277,7 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - デフォルトではホスト名、DB 名、ユーザー名もマスクします。
 - ローカルファイルの読み取り専用です。
 - 接続先 DB へのクエリ実行は実装していません。
+
+## ライセンス
+
+MIT License です。詳しくは [LICENSE](./LICENSE) を参照してください。

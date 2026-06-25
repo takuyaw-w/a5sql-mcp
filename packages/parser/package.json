@@ -1,6 +1,16 @@
 {
   "name": "@takuyaw-w/a5sql-mcp-parser",
-  "version": "0.2.1",
+  "version": "0.2.2",
+  "keywords": [
+    "a5er",
+    "a5sql",
+    "a5sql-mk2",
+    "database-schema",
+    "erd",
+    "parser",
+    "sql"
+  ],
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/takuyaw-w/a5sql-mcp"
