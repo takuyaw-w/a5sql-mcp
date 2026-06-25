@@ -4,6 +4,138 @@
 
 初期実装では安全性を優先し、A5:SQL の設定ファイルや接続先 DB への書き込み、DB への SQL 実行、資格情報の復号は行いません。
 
+---
+
+## インストール方法
+
+各 MCP クライアントに `a5sql-mcp` を登録し、読み取りたい A5:ER ファイルの絶対パスを指定します。
+
+### サーバーコマンド単体
+
+対象の A5:ER ファイルを指定して起動します。
+
+```bash
+npx a5sql-mcp --mcp /absolute/path/to/model.a5er
+```
+
+MCP クライアントから起動する場合は、相対パスの基準ディレクトリがクライアント依存になるため、基本的には絶対パスを指定します。
+
+### Codex
+
+Codex は `~/.codex/config.toml`、または trusted project 内の `.codex/config.toml` に MCP server を設定します。CLI から登録する場合:
+
+```bash
+codex mcp add a5sql -- npx -y a5sql-mcp --mcp /absolute/path/to/model.a5er
+```
+
+`config.toml` に直接書く場合:
+
+```toml
+[mcp_servers.a5sql]
+command = "npx"
+args = ["-y", "a5sql-mcp", "--mcp", "/absolute/path/to/model.a5er"]
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+```
+
+Codex のセッション内では `/mcp` で接続状態を確認できます。
+
+### Cursor
+
+Cursor は `.cursor/mcp.json` に MCP server を設定できます。
+
+設定例:
+
+```json
+{
+  "mcpServers": {
+    "a5sql": {
+      "command": "npx",
+      "args": ["-y", "a5sql-mcp", "--mcp", "/absolute/path/to/model.a5er"]
+    }
+  }
+}
+```
+
+### Claude Code
+
+Claude Code は `claude mcp add` で登録できます。ユーザー設定に登録する場合:
+
+```bash
+claude mcp add --transport stdio --scope user a5sql -- npx -y a5sql-mcp --mcp /absolute/path/to/model.a5er
+```
+
+現在のプロジェクトだけで共有する場合は、プロジェクト root の `.mcp.json` に書けます。ただし、このリポジトリ自体には利用者ごとに異なる A5:ER パスを固定しない方針です。
+
+```json
+{
+  "mcpServers": {
+    "a5sql": {
+      "command": "npx",
+      "args": ["-y", "a5sql-mcp", "--mcp", "/absolute/path/to/model.a5er"]
+    }
+  }
+}
+```
+
+Claude Code のセッション内では `/mcp` で接続状態を確認できます。
+
+## プロンプト例
+
+MCP クライアント側では、自然文で依頼すれば必要な tool が呼び出されます。tool 呼び出し自体を検証したい場合は、tool 名を明示すると挙動を確認しやすくなります。
+
+MCP 接続とファイル解析を確認する:
+
+```text
+a5sql の MCP tool を使って、parse_a5sql_file の結果から読み込めているテーブル数とリレーション数を教えて。
+```
+
+テーブル一覧を確認する:
+
+```text
+a5sql の MCP tool を使って、A5:ER ファイルに含まれるテーブル一覧を論理名つきで表示して。
+```
+
+特定テーブルの定義を確認する:
+
+```text
+a5sql の describe_a5sql_table を使って、users テーブルのカラム、主キー、NOT NULL、コメントを整理して。
+```
+
+リレーションを確認する:
+
+```text
+a5sql の list_a5sql_relationships を使って、users と関係しているテーブルを洗い出して。外部キーの向きも分かるように説明して。
+```
+
+業務用語からテーブル候補を探す:
+
+```text
+a5sql の find_a5sql_tables を使って、「製品」「商品」「product」に関係しそうなテーブルを探して。候補ごとに根拠になったカラム名も教えて。
+```
+
+SELECT SQL のたたき台を作る:
+
+```text
+a5sql の generate_sql_select を使って、ユーザー情報を取得する SELECT SQL を生成して。関連するプロフィール情報があれば JOIN も含めて。
+```
+
+フレームワーク向けのモデル作成に使う:
+
+```text
+a5sql の MCP tool でテーブル定義を読み取って、Laravel の Eloquent Model を作成して。fillable、casts、belongsTo / hasMany も定義から推測して。
+```
+
+レビュー観点を出す:
+
+```text
+a5sql の MCP tool で ER 図を確認して、NULL 許容、主キー、外部キー、命名の観点で気になるテーブル定義をレビューして。
+```
+
+この MCP サーバーはローカルファイルを読み取るだけで、接続先 DB へ SQL を実行しません。生成された SQL やモデルコードは、実際の DB 方言やアプリケーション規約に合わせて確認してから利用してください。
+
+---
+
 ## パッケージ構成
 
 ### `packages/parser`
@@ -111,53 +243,6 @@ node packages/cli/dist/index.js ./path/to/model.a5er
     "tables": [],
     "relationships": [],
     "warnings": []
-  }
-}
-```
-
-## MCP サーバー起動
-
-指定したファイルを対象に stdio MCP サーバーとして起動します。独立した `packages/mcp-server` は持たず、`packages/cli` の `--mcp` モードで提供します。
-
-ローカル開発中は次の形で起動します。
-
-```bash
-pnpm build
-pnpm local --mcp ./example/schema.a5er
-```
-
-package 公開後は次の形で実行できます。
-
-```bash
-npx a5sql-mcp --mcp ./path/to/model.a5er
-```
-
-MCP クライアントから起動する場合は、相対パスの基準ディレクトリがクライアント依存になるため、基本的には絶対パスを指定します。ローカル開発中に MCP クライアントへ設定する場合:
-
-```json
-{
-  "mcpServers": {
-    "a5sql": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/a5sql-mcp/packages/cli/dist/index.js",
-        "--mcp",
-        "/absolute/path/to/a5sql-mcp/example/schema.a5er"
-      ]
-    }
-  }
-}
-```
-
-package 公開後に MCP クライアントから使う場合:
-
-```json
-{
-  "mcpServers": {
-    "a5sql": {
-      "command": "npx",
-      "args": ["-y", "a5sql-mcp", "--mcp", "/absolute/path/to/model.a5er"]
-    }
   }
 }
 ```
