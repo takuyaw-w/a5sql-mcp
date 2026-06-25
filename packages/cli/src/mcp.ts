@@ -27,7 +27,7 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
   const initialFile = await parseFile(fileArg);
   const server = new McpServer({
     name: "a5sql-mcp",
-    version: "0.2.0",
+    version: "0.2.1",
   });
 
   server.registerTool(
