@@ -70,4 +70,6 @@ jobs:
         run: pnpm release:check
 
       - name: Publish packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm -r --filter "./packages/*" publish --access public --provenance --no-git-checks
