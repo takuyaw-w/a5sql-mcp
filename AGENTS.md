@@ -29,6 +29,9 @@
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返す。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返す。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返す。
+- `list_a5sql_relationships`: `.a5er` ファイル内のリレーション一覧を返す。
+- `find_a5sql_tables`: `.a5er` ファイル内のテーブルを、テーブル名・論理名・コメント・カラム名から検索する。
+- `generate_sql_select`: `.a5er` ファイル内の定義から SELECT SQL のたたき台を生成する。DB には接続しない。
 
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 

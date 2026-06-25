@@ -169,6 +169,9 @@ package 公開後に MCP クライアントから使う場合:
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返します。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返します。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返します。
+- `list_a5sql_relationships`: `.a5er` ファイル内のリレーション一覧を返します。任意でテーブル名により絞り込めます。
+- `find_a5sql_tables`: `.a5er` ファイル内のテーブルを、テーブル名・論理名・コメント・カラム名から検索します。
+- `generate_sql_select`: `.a5er` ファイル内の定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。
 
 ## 環境変数
 
