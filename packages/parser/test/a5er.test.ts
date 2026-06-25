@@ -56,7 +56,7 @@ describe("parseA5erIni", () => {
       Field="引用\\Qあり","quote_col","varchar(20)","",,,"line\\nbreak",$FFFFFFFF,""
     `);
 
-    expect(parsed.tables[0]?.columns[0]?.logicalName).toBe("引用\"あり");
+    expect(parsed.tables[0]?.columns[0]?.logicalName).toBe('引用"あり');
     expect(parsed.tables[0]?.columns[0]?.comment).toBe("line\nbreak");
   });
 });

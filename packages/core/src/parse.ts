@@ -1,14 +1,14 @@
 import { readA5sqlAsset } from "./assets.js";
-import { parseA5erIni, parseSqlStatements } from "@a5sql-mcp/parser";
+import { parseA5erIni, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
 import type { ParseAssetOptions, ParsedAssetResult } from "./types.js";
 
 export async function parseA5sqlAsset(
-  options: ParseAssetOptions
+  options: ParseAssetOptions,
 ): Promise<ParsedAssetResult | null> {
   const read = await readA5sqlAsset({
     roots: options.roots,
     assetId: options.assetId,
-    maxBytes: options.maxBytes ?? 1024 * 1024
+    maxBytes: options.maxBytes ?? 1024 * 1024,
   });
   if (!read) {
     return null;
@@ -23,7 +23,7 @@ export async function parseA5sqlAsset(
       manager: parsed.manager,
       tables: parsed.tables,
       relationships: parsed.relationships,
-      warnings: [...read.warnings, ...parsed.warnings]
+      warnings: [...read.warnings, ...parsed.warnings],
     };
   }
 
@@ -34,7 +34,7 @@ export async function parseA5sqlAsset(
       parser: "sql-heuristic",
       summary: `${statements.length} SQL statements`,
       statements,
-      warnings: read.warnings
+      warnings: read.warnings,
     };
   }
 
@@ -43,7 +43,7 @@ export async function parseA5sqlAsset(
       asset: read.asset,
       parser: "text-summary",
       summary: `${read.content.split(/\r?\n/).length} lines, ${read.content.length} characters`,
-      warnings: read.warnings
+      warnings: read.warnings,
     };
   }
 
@@ -51,6 +51,6 @@ export async function parseA5sqlAsset(
     asset: read.asset,
     parser: "unsupported",
     summary: "No text content returned for this asset type.",
-    warnings: read.warnings
+    warnings: read.warnings,
   };
 }

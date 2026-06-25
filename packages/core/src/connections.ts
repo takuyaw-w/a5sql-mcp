@@ -27,13 +27,13 @@ const CONNECTION_KEYS = new Map<string, keyof ConnectionCandidate["fields"]>([
   ["user", "user"],
   ["username", "user"],
   ["userid", "user"],
-  ["uid", "user"]
+  ["uid", "user"],
 ]);
 
 const CANDIDATE_KINDS = ["config", "text", "er"] as const;
 
 export async function listA5sqlConnections(
-  options: ListConnectionsOptions = {}
+  options: ListConnectionsOptions = {},
 ): Promise<ConnectionCandidate[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 50, 200));
   const assets = await searchA5sqlAssets({
@@ -41,7 +41,7 @@ export async function listA5sqlConnections(
     kinds: [...CANDIDATE_KINDS],
     limit: 500,
     includeHidden: true,
-    maxFileBytes: 512 * 1024
+    maxFileBytes: 512 * 1024,
   });
 
   const results: ConnectionCandidate[] = [];
@@ -57,7 +57,7 @@ export async function listA5sqlConnections(
     const parsed = extractConnectionCandidate(
       asset.path,
       decoded.text,
-      options.revealNonSecret ?? false
+      options.revealNonSecret ?? false,
     );
     if (parsed) {
       results.push(parsed);
@@ -70,7 +70,7 @@ export async function listA5sqlConnections(
 export function extractConnectionCandidate(
   sourcePath: string,
   text: string,
-  revealNonSecret: boolean
+  revealNonSecret: boolean,
 ): ConnectionCandidate | null {
   const normalizedText = maskSensitiveText(text);
   const rawValues = new Map<keyof ConnectionCandidate["fields"], string>();
@@ -110,7 +110,7 @@ export function extractConnectionCandidate(
     fields,
     hasPassword,
     matchedKeys: [...new Set(matchedKeys)].sort(),
-    warnings: revealNonSecret ? [] : ["non_secret_connection_fields_masked_by_default"]
+    warnings: revealNonSecret ? [] : ["non_secret_connection_fields_masked_by_default"],
   };
 }
 
@@ -136,19 +136,22 @@ function normalizeKey(key: string): string {
 }
 
 function cleanValue(value: string): string {
-  return value.trim().replace(/^["']|["']$/g, "").slice(0, 256);
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .slice(0, 256);
 }
 
 function fieldValue(value: string, reveal: boolean): ConnectionField {
   return {
     value: maskValue(value, reveal),
-    masked: !reveal
+    masked: !reveal,
   };
 }
 
 function scoreCandidate(
   values: Map<keyof ConnectionCandidate["fields"], string>,
-  hasPassword: boolean
+  hasPassword: boolean,
 ): number {
   let score = values.size;
   if (values.has("host")) {

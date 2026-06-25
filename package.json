@@ -1,19 +1,25 @@
 {
-  "name": "@a5sql-mcp/workspace",
+  "name": "@takuyaw-w/a5sql-mcp-workspace",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build": "pnpm -r build",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint .",
     "local": "node packages/cli/dist/index.js",
-    "pack:check": "pnpm --filter @a5sql-mcp/parser pack --dry-run && pnpm --filter @a5sql-mcp/core pack --dry-run && pnpm --filter a5sql-mcp pack --dry-run",
+    "pack:check": "pnpm --filter @takuyaw-w/a5sql-mcp-parser pack --dry-run && pnpm --filter @takuyaw-w/a5sql-mcp-core pack --dry-run && pnpm --filter @takuyaw-w/a5sql-mcp pack --dry-run",
+    "release:check": "pnpm format:check && pnpm lint && pnpm test && pnpm typecheck && pnpm build && pnpm pack:check",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  }
+  },
+  "packageManager": "pnpm@11.7.0"
 }

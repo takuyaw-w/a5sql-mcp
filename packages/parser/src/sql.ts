@@ -12,20 +12,20 @@ export function parseSqlStatements(text: string): ParsedSqlStatement[] {
       index,
       operation: detectOperation(statement),
       preview: statement.replace(/\s+/g, " ").trim().slice(0, 240),
-      referencedTables: detectReferencedTables(statement)
+      referencedTables: detectReferencedTables(statement),
     }));
 }
 
 function splitSqlStatements(text: string): string[] {
   const statements: string[] = [];
   let current = "";
-  let quote: "'" | "\"" | "`" | null = null;
+  let quote: "'" | '"' | "`" | null = null;
 
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
     const previous = text[index - 1];
-    if ((char === "'" || char === "\"" || char === "`") && previous !== "\\") {
-      quote = quote === char ? null : quote ?? char;
+    if ((char === "'" || char === '"' || char === "`") && previous !== "\\") {
+      quote = quote === char ? null : (quote ?? char);
     }
     if (char === ";" && quote === null) {
       if (current.trim()) {
@@ -43,7 +43,9 @@ function splitSqlStatements(text: string): string[] {
 }
 
 function detectOperation(statement: string): string {
-  const match = statement.match(/^\s*(select|insert|update|delete|merge|create|alter|drop|with)\b/i);
+  const match = statement.match(
+    /^\s*(select|insert|update|delete|merge|create|alter|drop|with)\b/i,
+  );
   return match?.[1]?.toLocaleLowerCase() ?? "unknown";
 }
 
@@ -53,7 +55,7 @@ function detectReferencedTables(statement: string): string[] {
     /\bfrom\s+([A-Za-z0-9_."]+)/gi,
     /\bjoin\s+([A-Za-z0-9_."]+)/gi,
     /\binto\s+([A-Za-z0-9_."]+)/gi,
-    /\bupdate\s+([A-Za-z0-9_."]+)/gi
+    /\bupdate\s+([A-Za-z0-9_."]+)/gi,
   ];
   for (const pattern of patterns) {
     for (const match of statement.matchAll(pattern)) {

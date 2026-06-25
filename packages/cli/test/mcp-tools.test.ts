@@ -10,7 +10,7 @@ import {
   findA5sqlTables,
   generateSqlSelect,
   listA5sqlRelationships,
-  type A5erCliResult
+  type A5erCliResult,
 } from "../src/mcp.js";
 
 async function parseSampleA5er(): Promise<A5erCliResult> {
@@ -25,21 +25,21 @@ async function parseSampleA5er(): Promise<A5erCliResult> {
       "PName=users",
       "LName=ユーザー",
       "Comment=サービス利用者",
-      "Field=\"ユーザーID\",\"id\",\"bigserial\",\"NOT NULL\",0,\"\",\"ユーザーの一意なID\",$FFFFFFFF,\"\"",
-      "Field=\"メールアドレス\",\"email\",\"varchar(255)\",\"NOT NULL\",,\"\",\"ログインに使うメールアドレス\",$FFFFFFFF,\"\"",
+      'Field="ユーザーID","id","bigserial","NOT NULL",0,"","ユーザーの一意なID",$FFFFFFFF,""',
+      'Field="メールアドレス","email","varchar(255)","NOT NULL",,"","ログインに使うメールアドレス",$FFFFFFFF,""',
       "",
       "[Entity]",
       "PName=user_profiles",
       "LName=ユーザープロフィール",
-      "Field=\"ユーザーID\",\"user_id\",\"bigint\",\"NOT NULL\",0,\"\",\"users.id を参照\",$FFFFFFFF,\"\"",
-      "Field=\"電話番号\",\"phone_number\",\"varchar(30)\",,,\"\",\"電話番号\",$FFFFFFFF,\"\"",
+      'Field="ユーザーID","user_id","bigint","NOT NULL",0,"","users.id を参照",$FFFFFFFF,""',
+      'Field="電話番号","phone_number","varchar(30)",,,"","電話番号",$FFFFFFFF,""',
       "",
       "[Entity]",
       "PName=orders",
       "LName=注文",
-      "Field=\"注文ID\",\"id\",\"bigserial\",\"NOT NULL\",0,\"\",\"注文の一意なID\",$FFFFFFFF,\"\"",
-      "Field=\"ユーザーID\",\"user_id\",\"bigint\",\"NOT NULL\",,\"\",\"users.id を参照\",$FFFFFFFF,\"\"",
-      "Field=\"注文番号\",\"order_number\",\"varchar(40)\",\"NOT NULL\",,\"\",\"ユーザー向け注文番号\",$FFFFFFFF,\"\"",
+      'Field="注文ID","id","bigserial","NOT NULL",0,"","注文の一意なID",$FFFFFFFF,""',
+      'Field="ユーザーID","user_id","bigint","NOT NULL",,"","users.id を参照",$FFFFFFFF,""',
+      'Field="注文番号","order_number","varchar(40)","NOT NULL",,"","ユーザー向け注文番号",$FFFFFFFF,""',
       "",
       "[Relation]",
       "Entity1=users",
@@ -57,11 +57,11 @@ async function parseSampleA5er(): Promise<A5erCliResult> {
       "Fields2=user_id",
       "RelationType1=2",
       "RelationType2=3",
-      "Caption=places orders"
+      "Caption=places orders",
     ].join("\n"),
-    "utf8"
+    "utf8",
   );
-  return await parseFile(filePath) as A5erCliResult;
+  return (await parseFile(filePath)) as A5erCliResult;
 }
 
 describe("A5:ER MCP tool helpers", () => {
@@ -70,7 +70,12 @@ describe("A5:ER MCP tool helpers", () => {
 
     const output = listA5sqlRelationships(parsed, { tableName: "user_profiles" }) as {
       foundTable: boolean;
-      relationships: Array<{ sourceTable: string; targetTable: string; targetColumns: string[]; caption?: string }>;
+      relationships: Array<{
+        sourceTable: string;
+        targetTable: string;
+        targetColumns: string[];
+        caption?: string;
+      }>;
     };
 
     expect(output.foundTable).toBe(true);
@@ -79,8 +84,8 @@ describe("A5:ER MCP tool helpers", () => {
         sourceTable: "users",
         targetTable: "user_profiles",
         targetColumns: ["user_id"],
-        caption: "has profile"
-      })
+        caption: "has profile",
+      }),
     ]);
   });
 
@@ -94,8 +99,8 @@ describe("A5:ER MCP tool helpers", () => {
     expect(output.tables).toEqual([
       expect.objectContaining({
         name: "user_profiles",
-        matchedBy: ["column:phone_number"]
-      })
+        matchedBy: ["column:phone_number"],
+      }),
     ]);
   });
 
@@ -107,7 +112,7 @@ describe("A5:ER MCP tool helpers", () => {
       includeRelations: true,
       relatedTables: ["orders"],
       whereColumns: ["id"],
-      limit: 50
+      limit: 50,
     }) as {
       found: boolean;
       includedTables: string[];
@@ -120,8 +125,8 @@ describe("A5:ER MCP tool helpers", () => {
     expect(output.includedTables).toEqual(["users", "orders"]);
     expect(output.parameters).toEqual([":id"]);
     expect(output.warnings).toEqual([]);
-    expect(output.sql).toContain("LEFT JOIN \"orders\" AS \"t1\" ON \"t1\".\"user_id\" = \"t0\".\"id\"");
-    expect(output.sql).toContain("WHERE \"t0\".\"id\" = :id");
+    expect(output.sql).toContain('LEFT JOIN "orders" AS "t1" ON "t1"."user_id" = "t0"."id"');
+    expect(output.sql).toContain('WHERE "t0"."id" = :id');
     expect(output.sql).toContain("LIMIT 50;");
   });
 
@@ -131,7 +136,7 @@ describe("A5:ER MCP tool helpers", () => {
     const output = generateSqlSelect(parsed, {
       tableName: "users",
       includeRelations: true,
-      relatedTables: ["missing_table"]
+      relatedTables: ["missing_table"],
     }) as {
       includedTables: string[];
       sql: string;

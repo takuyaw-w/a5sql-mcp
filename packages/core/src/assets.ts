@@ -10,7 +10,7 @@ import type {
   AssetRecord,
   ReadAssetOptions,
   ReadAssetResult,
-  SearchAssetsOptions
+  SearchAssetsOptions,
 } from "./types.js";
 
 const DEFAULT_LIMIT = 50;
@@ -32,7 +32,7 @@ const TEXT_EXTENSIONS = new Set([
   ".csv",
   ".log",
   ".md",
-  ".a5er"
+  ".a5er",
 ]);
 
 export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Promise<AssetRecord[]> {
@@ -40,7 +40,11 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
   const limit = clamp(options.limit ?? DEFAULT_LIMIT, 1, 500);
   const maxDepth = clamp(options.maxDepth ?? DEFAULT_MAX_DEPTH, 1, 32);
   const maxFiles = clamp(options.maxFiles ?? DEFAULT_MAX_FILES, 1, 100000);
-  const maxFileBytes = clamp(options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES, 1024, 10 * 1024 * 1024);
+  const maxFileBytes = clamp(
+    options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    1024,
+    10 * 1024 * 1024,
+  );
   const query = options.query?.trim().toLocaleLowerCase();
   const kinds = options.kinds ? new Set(options.kinds) : undefined;
   const results: AssetRecord[] = [];
@@ -49,7 +53,7 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
   for (const root of roots) {
     for await (const filePath of walkFiles(root, {
       includeHidden: options.includeHidden ?? false,
-      maxDepth
+      maxDepth,
     })) {
       if (visitedFiles >= maxFiles || results.length >= limit) {
         return results;
@@ -106,7 +110,7 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
         modifiedAt: fileStat.mtime.toISOString(),
         matched,
         snippet,
-        warning
+        warning,
       });
     }
   }
@@ -121,7 +125,7 @@ export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAss
   for (const root of roots) {
     for await (const filePath of walkFiles(root, {
       includeHidden: true,
-      maxDepth: DEFAULT_MAX_DEPTH
+      maxDepth: DEFAULT_MAX_DEPTH,
     })) {
       if (stableAssetId(filePath) !== options.assetId) {
         continue;
@@ -137,7 +141,7 @@ export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAss
         fileName: path.basename(filePath),
         size: fileStat.size,
         modifiedAt: fileStat.mtime.toISOString(),
-        matched: true
+        matched: true,
       };
 
       if (!isTextSearchable(filePath)) {
@@ -147,7 +151,7 @@ export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAss
           encoding: "binary_or_unsupported",
           truncated: false,
           bytesRead: 0,
-          warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"]
+          warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"],
         };
       }
 
@@ -158,7 +162,7 @@ export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAss
         encoding: decoded.encoding,
         truncated: decoded.truncated,
         bytesRead: decoded.bytesRead,
-        warnings: decoded.encoding === "binary" ? ["binary_file_not_returned"] : []
+        warnings: decoded.encoding === "binary" ? ["binary_file_not_returned"] : [],
       };
     }
   }
@@ -201,7 +205,7 @@ function isTextSearchable(filePath: string): boolean {
 async function* walkFiles(
   root: string,
   options: { includeHidden: boolean; maxDepth: number },
-  depth = 0
+  depth = 0,
 ): AsyncGenerator<string> {
   if (depth > options.maxDepth) {
     return;

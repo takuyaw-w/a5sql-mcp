@@ -12,9 +12,9 @@ describe("extractConnectionCandidate", () => {
         "Port=5432",
         "Database=app",
         "User=developer",
-        "Password=raw-password"
+        "Password=raw-password",
       ].join("\n"),
-      false
+      false,
     );
 
     expect(candidate).not.toBeNull();
@@ -28,7 +28,7 @@ describe("extractConnectionCandidate", () => {
     const candidate = extractConnectionCandidate(
       "/tmp/sample.ini",
       "Host=db.example.test\nDatabase=main\nUser=alice\nPassword=raw-password",
-      true
+      true,
     );
 
     expect(candidate?.fields.host?.value).toBe("db.example.test");

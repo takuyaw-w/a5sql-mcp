@@ -4,7 +4,7 @@ import type {
   ParsedA5erIndex,
   ParsedA5erPosition,
   ParsedA5erRelationship,
-  ParsedA5erTable
+  ParsedA5erTable,
 } from "./types.js";
 
 type A5erSection = {
@@ -39,7 +39,7 @@ export function parseA5erIni(text: string): ParsedA5erDocument {
     manager,
     tables,
     relationships,
-    warnings
+    warnings,
   };
 }
 
@@ -48,7 +48,7 @@ function parseHeader(text: string): { formatVersion?: number; encoding?: string 
   const encodingMatch = text.match(/^\s*#\s*A5:ER\s+ENCODING\s*:\s*([A-Za-z0-9_-]+)/im);
   return {
     formatVersion: formatMatch?.[1] ? Number(formatMatch[1]) : undefined,
-    encoding: encodingMatch?.[1]
+    encoding: encodingMatch?.[1],
   };
 }
 
@@ -113,7 +113,9 @@ function parseTable(section: A5erSection): ParsedA5erTable | null {
     comment: decodeEscaped(first(section, "Comment")),
     columns,
     indexes: all(section, "Index").map(parseIndex),
-    positions: all(section, "Position").map(parsePosition).filter((item): item is ParsedA5erPosition => item !== null)
+    positions: all(section, "Position")
+      .map(parsePosition)
+      .filter((item): item is ParsedA5erPosition => item !== null),
   };
 }
 
@@ -130,7 +132,7 @@ function parseField(value: string): ParsedA5erColumn {
     keyOrder,
     defaultValue: emptyToUndefined(parts[5]),
     comment: emptyToUndefined(parts[6]),
-    option: emptyToUndefined(parts[8])
+    option: emptyToUndefined(parts[8]),
   };
 }
 
@@ -144,7 +146,7 @@ function parseIndex(value: string): ParsedA5erIndex {
     name: emptyToUndefined(name),
     unique: uniqueType === 1 || uniqueType === 2,
     uniqueType: Number.isFinite(uniqueType) ? uniqueType : 0,
-    columns: parts.slice(1).filter(Boolean)
+    columns: parts.slice(1).filter(Boolean),
   };
 }
 
@@ -158,7 +160,7 @@ function parsePosition(value: string): ParsedA5erPosition | null {
     x: toNumber(parts[1]),
     y: toNumber(parts[2]),
     width: toNumber(parts[3]),
-    height: toNumber(parts[4])
+    height: toNumber(parts[4]),
   };
 }
 
@@ -176,7 +178,7 @@ function parseRelationship(section: A5erSection): ParsedA5erRelationship | null 
     fields2: splitList(first(section, "Fields2")),
     relationType1: toNumber(first(section, "RelationType1")),
     relationType2: toNumber(first(section, "RelationType2")),
-    caption: emptyToUndefined(first(section, "Caption"))
+    caption: emptyToUndefined(first(section, "Caption")),
   };
 }
 
@@ -195,7 +197,7 @@ export function parseComplexValue(value: string): unknown[] {
         continue;
       }
     }
-    if (char === "\"") {
+    if (char === '"') {
       quoted = !quoted;
       continue;
     }
@@ -236,7 +238,7 @@ function decodeEscape(value: string): string {
     case "\\":
       return "\\";
     case "Q":
-      return "\"";
+      return '"';
     case "q":
       return "'";
     case "t":
@@ -257,7 +259,12 @@ function all(section: A5erSection, key: string): string[] {
 }
 
 function splitList(value: string | undefined): string[] {
-  return value ? value.split(",").map((item) => item.trim()).filter(Boolean) : [];
+  return value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 }
 
 function stringifyComplexPart(value: unknown): string {
@@ -290,7 +297,7 @@ export type {
   ParsedA5erIndex,
   ParsedA5erPosition,
   ParsedA5erRelationship,
-  ParsedA5erTable
+  ParsedA5erTable,
 } from "./types.js";
 export { parseSqlStatements } from "./sql.js";
 export type { ParsedSqlStatement } from "./sql.js";

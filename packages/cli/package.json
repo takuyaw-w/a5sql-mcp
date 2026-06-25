@@ -1,15 +1,19 @@
 {
-  "name": "a5sql-mcp",
+  "name": "@takuyaw-w/a5sql-mcp",
   "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "bin": {
     "a5sql-mcp": "./dist/index.js"
   },
   "files": [
     "dist"
   ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
@@ -17,8 +21,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@a5sql-mcp/parser": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
+    "@takuyaw-w/a5sql-mcp-parser": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -8,7 +8,7 @@ describe("maskSensitiveText", () => {
       "host=localhost",
       "password=super-secret",
       "pwd = another-secret",
-      "token: abcdef"
+      "token: abcdef",
     ].join("\n");
 
     expect(maskSensitiveText(input)).toContain("password=***");

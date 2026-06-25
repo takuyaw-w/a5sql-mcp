@@ -6,7 +6,7 @@ import path from "node:path";
 import type { DetectLocationOptions, LocationCandidate } from "./types.js";
 
 export async function detectA5sqlLocations(
-  options: DetectLocationOptions = {}
+  options: DetectLocationOptions = {},
 ): Promise<LocationCandidate[]> {
   const env = options.env ?? process.env;
   const homeDir = options.homeDir ?? os.homedir();
@@ -37,7 +37,7 @@ export async function detectA5sqlLocations(
     "A5SQL",
     "A5SQL Mk-2",
     path.join("A5SQL Mk-2"),
-    path.join("A5M2", "Data")
+    path.join("A5M2", "Data"),
   ];
 
   for (const base of [appData, localAppData, userProfile, homeDir]) {
@@ -48,7 +48,7 @@ export async function detectA5sqlLocations(
       rawCandidates.push({
         path: path.join(base, suffix),
         source: base === homeDir ? "home" : "platform",
-        label: `${path.basename(base)}/${suffix}`
+        label: `${path.basename(base)}/${suffix}`,
       });
     }
   }
@@ -58,12 +58,12 @@ export async function detectA5sqlLocations(
       rawCandidates.push({
         path: path.join(wineUser, "AppData", "Roaming", suffix),
         source: "wine",
-        label: `Wine Roaming/${suffix}`
+        label: `Wine Roaming/${suffix}`,
       });
       rawCandidates.push({
         path: path.join(wineUser, "AppData", "Local", suffix),
         source: "wine",
-        label: `Wine Local/${suffix}`
+        label: `Wine Local/${suffix}`,
       });
     }
   }
@@ -90,7 +90,7 @@ function addIfPresent(
   candidates: Array<Omit<LocationCandidate, "exists" | "readable" | "reason">>,
   value: string | undefined,
   source: LocationCandidate["source"],
-  label: string
+  label: string,
 ): void {
   if (value) {
     candidates.push({ path: value, source, label });
@@ -121,7 +121,7 @@ function dedupePaths<T extends { path: string }>(items: T[]): T[] {
 }
 
 async function withAccessState(
-  candidate: Omit<LocationCandidate, "exists" | "readable" | "reason">
+  candidate: Omit<LocationCandidate, "exists" | "readable" | "reason">,
 ): Promise<LocationCandidate> {
   try {
     const current = await stat(candidate.path);
@@ -131,7 +131,8 @@ async function withAccessState(
     await access(candidate.path, constants.R_OK);
     return { ...candidate, exists: true, readable: true };
   } catch (error) {
-    const code = typeof error === "object" && error && "code" in error ? String(error.code) : "unknown";
+    const code =
+      typeof error === "object" && error && "code" in error ? String(error.code) : "unknown";
     if (code === "ENOENT") {
       return { ...candidate, exists: false, readable: false, reason: "not_found" };
     }

@@ -19,12 +19,12 @@ describe("a5sql-mcp cli", () => {
         "[Entity]",
         "PName=users",
         "LName=ユーザー",
-        "Field=\"ID\",\"id\",\"Integer\",\"NOT NULL\",0,\"\",\"\",$FFFFFFFF,\"\""
+        'Field="ID","id","Integer","NOT NULL",0,"","",$FFFFFFFF,""',
       ].join("\n"),
-      "utf8"
+      "utf8",
     );
 
-    const output = await parseFile(filePath) as {
+    const output = (await parseFile(filePath)) as {
       kind: string;
       parsed: { tables: Array<{ name: string }> };
     };
@@ -39,7 +39,7 @@ describe("a5sql-mcp cli", () => {
     const filePath = path.join(dir, "query.sql");
     await writeFile(filePath, "select * from users;", "utf8");
 
-    const output = await parseFile(filePath) as {
+    const output = (await parseFile(filePath)) as {
       kind: string;
       parsed: { statements: Array<{ operation: string; referencedTables: string[] }> };
     };

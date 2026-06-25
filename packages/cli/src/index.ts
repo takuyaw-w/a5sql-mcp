@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TextDecoder } from "node:util";
 
-import { parseA5erIni, parseSqlStatements } from "@a5sql-mcp/parser";
+import { parseA5erIni, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
 
 export type CliResult = {
   filePath: string;
@@ -37,7 +37,9 @@ function printHelp(): void {
   process.stderr.write(`Usage:\n`);
   process.stderr.write(`  a5sql-mcp <file>\n`);
   process.stderr.write(`  a5sql-mcp --mcp <file>\n\n`);
-  process.stderr.write(`Parse a local .a5er or .sql file and print JSON, or serve it over MCP stdio.\n`);
+  process.stderr.write(
+    `Parse a local .a5er or .sql file and print JSON, or serve it over MCP stdio.\n`,
+  );
 }
 
 function detectKind(filePath: string): CliResult["kind"] {
@@ -65,7 +67,7 @@ export async function parseFile(fileArg: string): Promise<CliResult> {
   return {
     filePath,
     kind,
-    parsed
+    parsed,
   };
 }
 

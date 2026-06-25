@@ -4,6 +4,8 @@ packages:
 catalog:
   "@modelcontextprotocol/sdk": ^1.29.0
   "@types/node": ^26.0.0
+  oxfmt: ^0.56.0
+  oxlint: ^1.71.0
   typescript: ^6.0.3
   vitest: ^4.0.16
   zod: ^4.4.3

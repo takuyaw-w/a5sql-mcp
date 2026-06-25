@@ -1,10 +1,4 @@
-export type A5sqlAssetKind =
-  | "sql"
-  | "er"
-  | "config"
-  | "text"
-  | "database"
-  | "unknown";
+export type A5sqlAssetKind = "sql" | "er" | "config" | "text" | "database" | "unknown";
 
 export type LocationCandidate = {
   path: string;
@@ -60,7 +54,11 @@ export type ReadAssetResult = {
   warnings: string[];
 };
 
-import type { ParsedA5erRelationship, ParsedA5erTable, ParsedSqlStatement } from "@a5sql-mcp/parser";
+import type {
+  ParsedA5erRelationship,
+  ParsedA5erTable,
+  ParsedSqlStatement,
+} from "@takuyaw-w/a5sql-mcp-parser";
 
 export type ParsedAssetResult = {
   asset: AssetRecord;

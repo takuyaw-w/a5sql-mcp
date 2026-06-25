@@ -4,8 +4,7 @@ const KEY_VALUE_SECRET =
 const XML_SECRET =
   /<(password|passwd|pwd|pass|secret|token|access_token|refresh_token|api[_-]?key)([^>]*)>([^<]*)<\/\1>/gi;
 
-const CONNECTION_STRING_SECRET =
-  /\b(password|pwd)(\s*=\s*)(["']?)([^;"'\r\n]+)(["']?)/gi;
+const CONNECTION_STRING_SECRET = /\b(password|pwd)(\s*=\s*)(["']?)([^;"'\r\n]+)(["']?)/gi;
 
 export function maskSensitiveText(input: string): string {
   return input

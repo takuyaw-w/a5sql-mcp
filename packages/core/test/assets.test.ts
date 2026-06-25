@@ -29,7 +29,7 @@ describe("A5:SQL asset search", () => {
 async function makeTempDir(): Promise<string> {
   const dir = path.join(os.tmpdir(), `a5sql-mcp-${randomUUID()}`);
   await mkdir(dir, {
-    recursive: true
+    recursive: true,
   });
   return dir;
 }

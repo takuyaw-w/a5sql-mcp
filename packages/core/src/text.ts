@@ -39,7 +39,7 @@ export async function readTextFile(filePath: string, maxBytes: number): Promise<
         text: "",
         encoding: "binary",
         bytesRead: buffer.length,
-        truncated
+        truncated,
       };
     }
 
@@ -54,7 +54,7 @@ export async function readTextFile(filePath: string, maxBytes: number): Promise<
           text,
           encoding,
           bytesRead: buffer.length,
-          truncated
+          truncated,
         };
       } catch {
         continue;
@@ -65,7 +65,7 @@ export async function readTextFile(filePath: string, maxBytes: number): Promise<
       text: buffer.toString("utf8"),
       encoding: "utf-8-lossy",
       bytesRead: buffer.length,
-      truncated
+      truncated,
     };
   } finally {
     await file.close();
