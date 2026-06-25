@@ -1,0 +1,248 @@
+# A5:ER FORMAT:19
+# A5:ER ENCODING:UTF8
+# Sample schema for a5sql-mcp local testing.
+
+[Manager]
+ProjectName=a5sql-mcp sample
+Author=a5sql-mcp
+Comment=CLI and MCP smoke testing sample schema.
+PageInfo="MAIN",6,"A3Landscape",$FFFFFF
+RDBMSTypeName=PostgreSQL
+GenerateComment=1
+GenerateCommentStatement=1
+CreateFk=1
+
+[Entity]
+PName=users
+LName=ユーザー
+Comment=サービスを利用するユーザー。
+Field="ユーザーID","id","bigserial","NOT NULL",0,"","ユーザーの一意なID",$FFFFFFFF,"",""
+Field="メールアドレス","email","varchar(255)","NOT NULL",,"","ログインに使うメールアドレス",$FFFFFFFF,"",""
+Field="表示名","display_name","varchar(100)","NOT NULL",,"","画面表示用の名前",$FFFFFFFF,"",""
+Field="状態","status","varchar(30)","NOT NULL",,"active","active, suspended など",$FFFFFFFF,"",""
+Field="作成日時","created_at","timestamp","NOT NULL",,"CURRENT_TIMESTAMP","作成日時",$FFFFFFFF,"",""
+Field="更新日時","updated_at","timestamp","NOT NULL",,"CURRENT_TIMESTAMP","更新日時",$FFFFFFFF,"",""
+Index=users_ix1=1,email
+Position="MAIN",200,200,700,700
+
+[Entity]
+PName=user_profiles
+LName=ユーザープロフィール
+Comment=ユーザーの追加プロフィール。
+Field="ユーザーID","user_id","bigint","NOT NULL",0,"","users.id を参照",$FFFFFFFF,"",""
+Field="姓","last_name","varchar(80)","NOT NULL",,"","姓",$FFFFFFFF,"",""
+Field="名","first_name","varchar(80)","NOT NULL",,"","名",$FFFFFFFF,"",""
+Field="電話番号","phone_number","varchar(30)",,,,"電話番号",$FFFFFFFF,"",""
+Field="誕生日","birthday","date",,,,"誕生日",$FFFFFFFF,"",""
+Field="作成日時","created_at","timestamp","NOT NULL",,"CURRENT_TIMESTAMP","作成日時",$FFFFFFFF,"",""
+Position="MAIN",1300,200,780,650
+
+[Entity]
+PName=addresses
+LName=住所
+Comment=配送や請求に使う住所。
+Field="住所ID","id","bigserial","NOT NULL",0,"","住所の一意なID",$FFFFFFFF,"",""
+Field="ユーザーID","user_id","bigint","NOT NULL",,"","users.id を参照",$FFFFFFFF,"",""
+Field="郵便番号","postal_code","varchar(20)","NOT NULL",,"","郵便番号",$FFFFFFFF,"",""
+Field="都道府県","prefecture","varchar(80)","NOT NULL",,"","都道府県",$FFFFFFFF,"",""
+Field="市区町村","city","varchar(120)","NOT NULL",,"","市区町村",$FFFFFFFF,"",""
+Field="住所1","address_line1","varchar(255)","NOT NULL",,"","町名・番地",$FFFFFFFF,"",""
+Field="住所2","address_line2","varchar(255)",,,,"建物名など",$FFFFFFFF,"",""
+Index=addresses_ix1=0,user_id
+Position="MAIN",2400,200,820,760
+
+[Entity]
+PName=categories
+LName=カテゴリ
+Comment=商品カテゴリ。
+Field="カテゴリID","id","bigserial","NOT NULL",0,"","カテゴリの一意なID",$FFFFFFFF,"",""
+Field="親カテゴリID","parent_id","bigint",,,,"親カテゴリ。NULL の場合はルート",$FFFFFFFF,"",""
+Field="カテゴリ名","name","varchar(120)","NOT NULL",,"","カテゴリ名",$FFFFFFFF,"",""
+Field="表示順","sort_order","integer","NOT NULL",,"0","表示順",$FFFFFFFF,"",""
+Field="有効","is_active","boolean","NOT NULL",,"true","有効なカテゴリか",$FFFFFFFF,"",""
+Index=categories_ix1=0,parent_id
+Position="MAIN",200,1300,760,650
+
+[Entity]
+PName=products
+LName=商品
+Comment=販売対象の商品。
+Field="商品ID","id","bigserial","NOT NULL",0,"","商品の一意なID",$FFFFFFFF,"",""
+Field="カテゴリID","category_id","bigint","NOT NULL",,"","categories.id を参照",$FFFFFFFF,"",""
+Field="SKU","sku","varchar(80)","NOT NULL",,"","在庫管理用 SKU",$FFFFFFFF,"",""
+Field="商品名","name","varchar(200)","NOT NULL",,"","商品名",$FFFFFFFF,"",""
+Field="価格","price","numeric(12,2)","NOT NULL",,"0","販売価格",$FFFFFFFF,"",""
+Field="販売状態","status","varchar(30)","NOT NULL",,"draft","draft, active, archived など",$FFFFFFFF,"",""
+Field="作成日時","created_at","timestamp","NOT NULL",,"CURRENT_TIMESTAMP","作成日時",$FFFFFFFF,"",""
+Index=products_ix1=1,sku
+Index=products_ix2=0,category_id
+Position="MAIN",1300,1300,850,760
+
+[Entity]
+PName=inventory_items
+LName=在庫
+Comment=商品ごとの在庫数。
+Field="在庫ID","id","bigserial","NOT NULL",0,"","在庫の一意なID",$FFFFFFFF,"",""
+Field="商品ID","product_id","bigint","NOT NULL",,"","products.id を参照",$FFFFFFFF,"",""
+Field="倉庫コード","warehouse_code","varchar(40)","NOT NULL",,"MAIN","倉庫コード",$FFFFFFFF,"",""
+Field="在庫数","quantity","integer","NOT NULL",,"0","販売可能数",$FFFFFFFF,"",""
+Field="引当数","reserved_quantity","integer","NOT NULL",,"0","注文で引当済みの数",$FFFFFFFF,"",""
+Field="更新日時","updated_at","timestamp","NOT NULL",,"CURRENT_TIMESTAMP","更新日時",$FFFFFFFF,"",""
+Index=inventory_items_ix1=1,product_id,warehouse_code
+Position="MAIN",2400,1300,900,700
+
+[Entity]
+PName=orders
+LName=注文
+Comment=ユーザーの注文。
+Field="注文ID","id","bigserial","NOT NULL",0,"","注文の一意なID",$FFFFFFFF,"",""
+Field="ユーザーID","user_id","bigint","NOT NULL",,"","users.id を参照",$FFFFFFFF,"",""
+Field="配送先住所ID","shipping_address_id","bigint","NOT NULL",,"","addresses.id を参照",$FFFFFFFF,"",""
+Field="注文番号","order_number","varchar(40)","NOT NULL",,"","ユーザー向け注文番号",$FFFFFFFF,"",""
+Field="注文状態","status","varchar(30)","NOT NULL",,"pending","pending, paid, shipped など",$FFFFFFFF,"",""
+Field="合計金額","total_amount","numeric(12,2)","NOT NULL",,"0","注文合計",$FFFFFFFF,"",""
+Field="注文日時","ordered_at","timestamp","NOT NULL",,"CURRENT_TIMESTAMP","注文日時",$FFFFFFFF,"",""
+Index=orders_ix1=1,order_number
+Index=orders_ix2=0,user_id
+Position="MAIN",200,2400,850,760
+
+[Entity]
+PName=order_items
+LName=注文明細
+Comment=注文に含まれる商品明細。
+Field="注文明細ID","id","bigserial","NOT NULL",0,"","注文明細の一意なID",$FFFFFFFF,"",""
+Field="注文ID","order_id","bigint","NOT NULL",,"","orders.id を参照",$FFFFFFFF,"",""
+Field="商品ID","product_id","bigint","NOT NULL",,"","products.id を参照",$FFFFFFFF,"",""
+Field="数量","quantity","integer","NOT NULL",,"1","注文数量",$FFFFFFFF,"",""
+Field="単価","unit_price","numeric(12,2)","NOT NULL",,"0","注文時点の単価",$FFFFFFFF,"",""
+Field="小計","subtotal_amount","numeric(12,2)","NOT NULL",,"0","明細小計",$FFFFFFFF,"",""
+Index=order_items_ix1=0,order_id
+Index=order_items_ix2=0,product_id
+Position="MAIN",1300,2400,850,700
+
+[Entity]
+PName=payments
+LName=支払い
+Comment=注文に対する支払い。
+Field="支払いID","id","bigserial","NOT NULL",0,"","支払いの一意なID",$FFFFFFFF,"",""
+Field="注文ID","order_id","bigint","NOT NULL",,"","orders.id を参照",$FFFFFFFF,"",""
+Field="支払い方法","method","varchar(40)","NOT NULL",,"card","card, bank_transfer など",$FFFFFFFF,"",""
+Field="支払い状態","status","varchar(30)","NOT NULL",,"authorized","authorized, captured, failed など",$FFFFFFFF,"",""
+Field="支払い金額","amount","numeric(12,2)","NOT NULL",,"0","支払い金額",$FFFFFFFF,"",""
+Field="支払い日時","paid_at","timestamp",,,,"支払い完了日時",$FFFFFFFF,"",""
+Index=payments_ix1=0,order_id
+Position="MAIN",2400,2400,820,680
+
+[Entity]
+PName=shipments
+LName=配送
+Comment=注文の配送情報。
+Field="配送ID","id","bigserial","NOT NULL",0,"","配送の一意なID",$FFFFFFFF,"",""
+Field="注文ID","order_id","bigint","NOT NULL",,"","orders.id を参照",$FFFFFFFF,"",""
+Field="配送会社","carrier","varchar(80)",,,,"配送会社",$FFFFFFFF,"",""
+Field="追跡番号","tracking_number","varchar(120)",,,,"配送追跡番号",$FFFFFFFF,"",""
+Field="配送状態","status","varchar(30)","NOT NULL",,"preparing","preparing, shipped, delivered など",$FFFFFFFF,"",""
+Field="発送日時","shipped_at","timestamp",,,,"発送日時",$FFFFFFFF,"",""
+Field="配達日時","delivered_at","timestamp",,,,"配達完了日時",$FFFFFFFF,"",""
+Index=shipments_ix1=0,order_id
+Position="MAIN",3500,2400,850,720
+
+[Relation]
+Entity1=users
+Entity2=user_profiles
+Fields1=id
+Fields2=user_id
+RelationType1=2
+RelationType2=2
+Caption=has profile
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=users
+Entity2=addresses
+Fields1=id
+Fields2=user_id
+RelationType1=2
+RelationType2=3
+Caption=has addresses
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=categories
+Entity2=products
+Fields1=id
+Fields2=category_id
+RelationType1=2
+RelationType2=3
+Caption=contains products
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=products
+Entity2=inventory_items
+Fields1=id
+Fields2=product_id
+RelationType1=2
+RelationType2=3
+Caption=has inventory
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=users
+Entity2=orders
+Fields1=id
+Fields2=user_id
+RelationType1=2
+RelationType2=3
+Caption=places orders
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=addresses
+Entity2=orders
+Fields1=id
+Fields2=shipping_address_id
+RelationType1=2
+RelationType2=3
+Caption=ships to
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=orders
+Entity2=order_items
+Fields1=id
+Fields2=order_id
+RelationType1=2
+RelationType2=3
+Caption=has items
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=products
+Entity2=order_items
+Fields1=id
+Fields2=product_id
+RelationType1=2
+RelationType2=3
+Caption=ordered product
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=orders
+Entity2=payments
+Fields1=id
+Fields2=order_id
+RelationType1=2
+RelationType2=3
+Caption=paid by
+Position="MAIN",0,5000,5000,5000,R,L,""
+
+[Relation]
+Entity1=orders
+Entity2=shipments
+Fields1=id
+Fields2=order_id
+RelationType1=2
+RelationType2=3
+Caption=shipped by
+Position="MAIN",0,5000,5000,5000,R,L,""

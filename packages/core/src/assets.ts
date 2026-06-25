@@ -1,0 +1,248 @@
+import { opendir, stat } from "node:fs/promises";
+import path from "node:path";
+
+import { stableAssetId } from "./hash.js";
+import { detectA5sqlLocations } from "./locations.js";
+import { maskSensitiveText } from "./mask.js";
+import { readTextFile } from "./text.js";
+import type {
+  A5sqlAssetKind,
+  AssetRecord,
+  ReadAssetOptions,
+  ReadAssetResult,
+  SearchAssetsOptions
+} from "./types.js";
+
+const DEFAULT_LIMIT = 50;
+const DEFAULT_MAX_DEPTH = 8;
+const DEFAULT_MAX_FILES = 5000;
+const DEFAULT_MAX_FILE_BYTES = 512 * 1024;
+const DEFAULT_READ_BYTES = 128 * 1024;
+
+const TEXT_EXTENSIONS = new Set([
+  ".sql",
+  ".txt",
+  ".ini",
+  ".conf",
+  ".config",
+  ".xml",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".csv",
+  ".log",
+  ".md",
+  ".a5er"
+]);
+
+export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Promise<AssetRecord[]> {
+  const roots = await resolveReadableRoots(options.roots);
+  const limit = clamp(options.limit ?? DEFAULT_LIMIT, 1, 500);
+  const maxDepth = clamp(options.maxDepth ?? DEFAULT_MAX_DEPTH, 1, 32);
+  const maxFiles = clamp(options.maxFiles ?? DEFAULT_MAX_FILES, 1, 100000);
+  const maxFileBytes = clamp(options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES, 1024, 10 * 1024 * 1024);
+  const query = options.query?.trim().toLocaleLowerCase();
+  const kinds = options.kinds ? new Set(options.kinds) : undefined;
+  const results: AssetRecord[] = [];
+  let visitedFiles = 0;
+
+  for (const root of roots) {
+    for await (const filePath of walkFiles(root, {
+      includeHidden: options.includeHidden ?? false,
+      maxDepth
+    })) {
+      if (visitedFiles >= maxFiles || results.length >= limit) {
+        return results;
+      }
+      visitedFiles += 1;
+
+      const kind = classifyAsset(filePath);
+      if (kind === "unknown" && !query) {
+        continue;
+      }
+      if (kinds && !kinds.has(kind)) {
+        continue;
+      }
+
+      const fileStat = await safeStat(filePath);
+      if (!fileStat?.isFile()) {
+        continue;
+      }
+
+      const textSearchable = isTextSearchable(filePath) && fileStat.size <= maxFileBytes;
+      let matched = !query;
+      let snippet: string | undefined;
+      let warning: string | undefined;
+
+      if (query && textSearchable) {
+        const decoded = await readTextFile(filePath, maxFileBytes);
+        if (decoded.encoding === "binary") {
+          warning = "binary_file_not_searched";
+          matched = path.basename(filePath).toLocaleLowerCase().includes(query);
+        } else {
+          const index = decoded.text.toLocaleLowerCase().indexOf(query);
+          matched = index >= 0 || path.basename(filePath).toLocaleLowerCase().includes(query);
+          if (index >= 0) {
+            snippet = makeSnippet(maskSensitiveText(decoded.text), index);
+          }
+        }
+      } else if (query) {
+        matched = path.basename(filePath).toLocaleLowerCase().includes(query);
+        if (!matched && fileStat.size > maxFileBytes) {
+          warning = "file_too_large_for_content_search";
+        }
+      }
+
+      if (!matched) {
+        continue;
+      }
+
+      results.push({
+        id: stableAssetId(filePath),
+        kind,
+        path: filePath,
+        fileName: path.basename(filePath),
+        size: fileStat.size,
+        modifiedAt: fileStat.mtime.toISOString(),
+        matched,
+        snippet,
+        warning
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAssetResult | null> {
+  const maxBytes = clamp(options.maxBytes ?? DEFAULT_READ_BYTES, 1, 2 * 1024 * 1024);
+  const roots = await resolveReadableRoots(options.roots);
+
+  for (const root of roots) {
+    for await (const filePath of walkFiles(root, {
+      includeHidden: true,
+      maxDepth: DEFAULT_MAX_DEPTH
+    })) {
+      if (stableAssetId(filePath) !== options.assetId) {
+        continue;
+      }
+      const fileStat = await safeStat(filePath);
+      if (!fileStat?.isFile()) {
+        return null;
+      }
+      const asset: AssetRecord = {
+        id: options.assetId,
+        kind: classifyAsset(filePath),
+        path: filePath,
+        fileName: path.basename(filePath),
+        size: fileStat.size,
+        modifiedAt: fileStat.mtime.toISOString(),
+        matched: true
+      };
+
+      if (!isTextSearchable(filePath)) {
+        return {
+          asset,
+          content: "",
+          encoding: "binary_or_unsupported",
+          truncated: false,
+          bytesRead: 0,
+          warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"]
+        };
+      }
+
+      const decoded = await readTextFile(filePath, maxBytes);
+      return {
+        asset,
+        content: maskSensitiveText(decoded.text),
+        encoding: decoded.encoding,
+        truncated: decoded.truncated,
+        bytesRead: decoded.bytesRead,
+        warnings: decoded.encoding === "binary" ? ["binary_file_not_returned"] : []
+      };
+    }
+  }
+
+  return null;
+}
+
+export function classifyAsset(filePath: string): A5sqlAssetKind {
+  const extension = path.extname(filePath).toLocaleLowerCase();
+  if (extension === ".sql") {
+    return "sql";
+  }
+  if (extension === ".a5er") {
+    return "er";
+  }
+  if ([".ini", ".conf", ".config", ".xml", ".json", ".yaml", ".yml"].includes(extension)) {
+    return "config";
+  }
+  if ([".db", ".sqlite", ".sqlite3", ".mdb", ".accdb"].includes(extension)) {
+    return "database";
+  }
+  if (TEXT_EXTENSIONS.has(extension)) {
+    return "text";
+  }
+  return "unknown";
+}
+
+async function resolveReadableRoots(roots: string[] | undefined): Promise<string[]> {
+  if (roots && roots.length > 0) {
+    return roots.map((root) => path.resolve(root));
+  }
+  const detected = await detectA5sqlLocations();
+  return detected.filter((item) => item.exists && item.readable).map((item) => item.path);
+}
+
+function isTextSearchable(filePath: string): boolean {
+  return TEXT_EXTENSIONS.has(path.extname(filePath).toLocaleLowerCase());
+}
+
+async function* walkFiles(
+  root: string,
+  options: { includeHidden: boolean; maxDepth: number },
+  depth = 0
+): AsyncGenerator<string> {
+  if (depth > options.maxDepth) {
+    return;
+  }
+
+  let dir;
+  try {
+    dir = await opendir(root);
+  } catch {
+    return;
+  }
+
+  for await (const entry of dir) {
+    if (!options.includeHidden && entry.name.startsWith(".")) {
+      continue;
+    }
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      yield* walkFiles(entryPath, options, depth + 1);
+      continue;
+    }
+    if (entry.isFile()) {
+      yield entryPath;
+    }
+  }
+}
+
+async function safeStat(filePath: string) {
+  try {
+    return await stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function makeSnippet(text: string, matchIndex: number): string {
+  const start = Math.max(0, matchIndex - 120);
+  const end = Math.min(text.length, matchIndex + 240);
+  return text.slice(start, end).replace(/\s+/g, " ").trim();
+}
