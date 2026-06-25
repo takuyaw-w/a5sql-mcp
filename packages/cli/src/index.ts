@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,7 +78,23 @@ export async function readTextFile(filePath: string): Promise<string> {
   return decoder.decode(buffer).replace(/^\uFEFF/, "");
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+export function isCliEntrypoint(argvEntry: string | undefined, moduleUrl: string): boolean {
+  if (!argvEntry) {
+    return false;
+  }
+  return resolveRealPath(argvEntry) === resolveRealPath(fileURLToPath(moduleUrl));
+}
+
+function resolveRealPath(filePath: string): string {
+  const resolvedPath = path.resolve(filePath);
+  try {
+    return realpathSync(resolvedPath);
+  } catch {
+    return resolvedPath;
+  }
+}
+
+if (isCliEntrypoint(process.argv[1], import.meta.url)) {
   main(process.argv).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`a5sql-mcp: ${message}\n`);

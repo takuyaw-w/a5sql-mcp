@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { parseFile } from "../src/index.js";
+import { isCliEntrypoint, parseFile } from "../src/index.js";
 
 describe("a5sql-mcp cli", () => {
   it("parses an a5er file path argument", async () => {
@@ -47,5 +48,19 @@ describe("a5sql-mcp cli", () => {
     expect(output.kind).toBe("sql");
     expect(output.parsed.statements[0]?.operation).toBe("select");
     expect(output.parsed.statements[0]?.referencedTables).toEqual(["users"]);
+  });
+
+  it("detects package bin symlink as direct cli invocation", async () => {
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-cli-${randomUUID()}`);
+    const distDir = path.join(dir, "dist");
+    const binDir = path.join(dir, "node_modules", ".bin");
+    await mkdir(distDir, { recursive: true });
+    await mkdir(binDir, { recursive: true });
+    const entrypoint = path.join(distDir, "index.js");
+    const binPath = path.join(binDir, "a5sql-mcp");
+    await writeFile(entrypoint, "", "utf8");
+    await symlink(entrypoint, binPath);
+
+    expect(isCliEntrypoint(binPath, pathToFileURL(entrypoint).href)).toBe(true);
   });
 });
