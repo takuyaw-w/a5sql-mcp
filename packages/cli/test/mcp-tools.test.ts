@@ -8,8 +8,11 @@ import { describe, expect, it } from "vitest";
 import { parseFile } from "../src/index.js";
 import {
   findA5sqlTables,
+  generateMermaidErDiagram,
+  generateModelFiles,
   generateSqlSelect,
   listA5sqlRelationships,
+  reviewA5sqlSchema,
   type A5erCliResult,
 } from "../src/mcp.js";
 
@@ -40,6 +43,13 @@ async function parseSampleA5er(): Promise<A5erCliResult> {
       'Field="注文ID","id","bigserial","NOT NULL",0,"","注文の一意なID",$FFFFFFFF,""',
       'Field="ユーザーID","user_id","bigint","NOT NULL",,"","users.id を参照",$FFFFFFFF,""',
       'Field="注文番号","order_number","varchar(40)","NOT NULL",,"","ユーザー向け注文番号",$FFFFFFFF,""',
+      "",
+      "[Entity]",
+      "PName=audit_logs",
+      "LName=監査ログ",
+      'Field="監査ログID","id","bigserial","NOT NULL",,"","監査ログの一意なID",$FFFFFFFF,""',
+      'Field="ユーザーID","user_id","bigint","NOT NULL",,"","users.id を参照",$FFFFFFFF,""',
+      'Field="詳細","details",,,,"","",$FFFFFFFF,""',
       "",
       "[Relation]",
       "Entity1=users",
@@ -146,5 +156,95 @@ describe("A5:ER MCP tool helpers", () => {
     expect(output.includedTables).toEqual(["users"]);
     expect(output.sql).not.toContain("LEFT JOIN");
     expect(output.warnings).toEqual(["related_table_filter_not_found:missing_table"]);
+  });
+
+  it("generates Mermaid ER diagram text", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = generateMermaidErDiagram(parsed, {
+      tableNames: ["users", "orders"],
+    }) as {
+      mermaid: string;
+      relationshipCount: number;
+      tableCount: number;
+      warnings: string[];
+    };
+
+    expect(output.tableCount).toBe(2);
+    expect(output.relationshipCount).toBe(1);
+    expect(output.warnings).toEqual([]);
+    expect(output.mermaid).toContain("erDiagram");
+    expect(output.mermaid).toContain("users ||--o{ orders : places orders");
+    expect(output.mermaid).toContain('bigserial id PK NOT_NULL "ユーザーID"');
+  });
+
+  it("reviews schema quality issues", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = reviewA5sqlSchema(parsed, { includeInfo: false }) as {
+      summary: { error: number; warning: number; info: number };
+      issues: Array<{ code: string; table?: string; column?: string }>;
+    };
+
+    expect(output.summary.error).toBeGreaterThanOrEqual(1);
+    expect(output.summary.warning).toBeGreaterThanOrEqual(2);
+    expect(output.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "table_without_primary_key",
+          table: "audit_logs",
+        }),
+        expect.objectContaining({
+          code: "foreign_key_like_column_without_relationship",
+          table: "audit_logs",
+          column: "user_id",
+        }),
+        expect.objectContaining({
+          code: "column_missing_data_type",
+          table: "audit_logs",
+          column: "details",
+        }),
+      ]),
+    );
+  });
+
+  it("generates Laravel model files", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = generateModelFiles(parsed, {
+      framework: "laravel",
+      tableNames: ["users"],
+    }) as {
+      files: Array<{ path: string; content: string }>;
+      tableCount: number;
+    };
+
+    expect(output.tableCount).toBe(1);
+    expect(output.files[0]?.path).toBe("app/Models/User.php");
+    expect(output.files[0]?.content).toContain("class User extends Model");
+    expect(output.files[0]?.content).toContain("protected $table = 'users';");
+    expect(output.files[0]?.content).toContain("public function orders()");
+    expect(output.files[0]?.content).toContain(
+      "return $this->hasMany(Order::class, 'user_id', 'id');",
+    );
+  });
+
+  it("generates SQLAlchemy model file", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = generateModelFiles(parsed, {
+      framework: "sqlalchemy",
+      tableNames: ["users", "orders"],
+    }) as {
+      files: Array<{ path: string; content: string }>;
+      tableCount: number;
+    };
+
+    expect(output.tableCount).toBe(2);
+    expect(output.files).toHaveLength(1);
+    expect(output.files[0]?.path).toBe("models.py");
+    expect(output.files[0]?.content).toContain("class User(Base):");
+    expect(output.files[0]?.content).toContain('__tablename__ = "orders"');
+    expect(output.files[0]?.content).toContain('ForeignKey("users.id")');
   });
 });

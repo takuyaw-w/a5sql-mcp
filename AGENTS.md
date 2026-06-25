@@ -32,6 +32,9 @@
 - `list_a5sql_relationships`: `.a5er` ファイル内のリレーション一覧を返す。
 - `find_a5sql_tables`: `.a5er` ファイル内のテーブルを、テーブル名・論理名・コメント・カラム名から検索する。
 - `generate_sql_select`: `.a5er` ファイル内の定義から SELECT SQL のたたき台を生成する。DB には接続しない。
+- `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成する。
+- `generate_model_files`: `.a5er` ファイル内のテーブル定義から Laravel Eloquent または SQLAlchemy のモデルファイル案を生成する。ファイルシステムには書き込まない。
+- `review_a5sql_schema`: `.a5er` ファイル内のスキーマ品質を、主キー・型・コメント・リレーション整合性の観点でレビューする。
 
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 

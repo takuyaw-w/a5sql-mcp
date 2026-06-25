@@ -120,16 +120,22 @@ SELECT SQL のたたき台を作る:
 a5sql の generate_sql_select を使って、ユーザー情報を取得する SELECT SQL を生成して。関連するプロフィール情報があれば JOIN も含めて。
 ```
 
+Mermaid ER 図を生成する:
+
+```text
+a5sql の generate_mermaid_er_diagram を使って、A5:ER ファイルの Mermaid ER diagram を生成して。
+```
+
 フレームワーク向けのモデル作成に使う:
 
 ```text
-a5sql の MCP tool でテーブル定義を読み取って、Laravel の Eloquent Model を作成して。fillable、casts、belongsTo / hasMany も定義から推測して。
+a5sql の generate_model_files を使って、users と user_profiles の Laravel Eloquent Model を作成して。fillable、casts、belongsTo / hasMany も定義から推測して。
 ```
 
 レビュー観点を出す:
 
 ```text
-a5sql の MCP tool で ER 図を確認して、NULL 許容、主キー、外部キー、命名の観点で気になるテーブル定義をレビューして。
+a5sql の review_a5sql_schema を使って、NULL 許容、主キー、外部キー、命名の観点で気になるテーブル定義をレビューして。
 ```
 
 この MCP サーバーはローカルファイルを読み取るだけで、接続先 DB へ SQL を実行しません。生成された SQL やモデルコードは、実際の DB 方言やアプリケーション規約に合わせて確認してから利用してください。
@@ -257,6 +263,9 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - `list_a5sql_relationships`: `.a5er` ファイル内のリレーション一覧を返します。任意でテーブル名により絞り込めます。
 - `find_a5sql_tables`: `.a5er` ファイル内のテーブルを、テーブル名・論理名・コメント・カラム名から検索します。
 - `generate_sql_select`: `.a5er` ファイル内の定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。
+- `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成します。
+- `generate_model_files`: `.a5er` ファイル内のテーブル定義から Laravel Eloquent または SQLAlchemy のモデルファイル案を生成します。ファイルシステムには書き込みません。
+- `review_a5sql_schema`: `.a5er` ファイル内のスキーマ品質を、主キー・型・コメント・リレーション整合性の観点でレビューします。
 
 ## 環境変数
 
