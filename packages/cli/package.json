@@ -1,6 +1,10 @@
 {
   "name": "@takuyaw-w/a5sql-mcp",
   "version": "0.2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/takuyaw-w/a5sql-mcp"
+  },
   "bin": {
     "a5sql-mcp": "./dist/index.js"
   },

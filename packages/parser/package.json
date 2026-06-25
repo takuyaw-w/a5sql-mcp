@@ -1,6 +1,10 @@
 {
   "name": "@takuyaw-w/a5sql-mcp-parser",
   "version": "0.2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/takuyaw-w/a5sql-mcp"
+  },
   "files": [
     "dist"
   ],
