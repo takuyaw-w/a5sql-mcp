@@ -58,26 +58,35 @@ packages/cli
 ```bash
 pnpm install
 pnpm build
+pnpm test
+pnpm typecheck
 ```
 
 外部ライブラリのバージョンは `pnpm-workspace.yaml` の `catalog` で管理します。各 package の `package.json` では、共通 tooling や MCP SDK などの外部依存を `catalog:` で参照します。
 
+リリース前に npm package の内容を確認する場合:
+
+```bash
+pnpm build
+pnpm pack:check
+```
+
 ## CLI
 
-ローカル開発中は、まだ npm registry に公開されていないため `npx a5sql-mcp ...` は使えません。まず build してから root script で実行します。
+ローカル開発中は、まず build してから root script で実行します。
 
 ```bash
 pnpm build
 pnpm local ./schema.a5er
 ```
 
-package 公開後は次の形を想定しています。
+package 公開後は次の形で実行できます。
 
 ```bash
 npx a5sql-mcp ./path/to/model.a5er
 ```
 
-package 単体で確認する場合は次のようにも実行できます。
+package 単体で確認する場合:
 
 ```bash
 pnpm --filter a5sql-mcp start -- ./path/to/model.a5er
@@ -108,7 +117,7 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 
 ## MCP サーバー起動
 
-指定したファイルを対象に stdio MCP サーバーとして起動します。
+指定したファイルを対象に stdio MCP サーバーとして起動します。独立した `packages/mcp-server` は持たず、`packages/cli` の `--mcp` モードで提供します。
 
 ローカル開発中は次の形で起動します。
 
@@ -117,17 +126,13 @@ pnpm build
 pnpm local --mcp ./schema.a5er
 ```
 
-package 公開後は次の形を想定しています。
+package 公開後は次の形で実行できます。
 
 ```bash
 npx a5sql-mcp --mcp ./path/to/model.a5er
 ```
 
-MCP クライアントから起動する場合は、相対パスの基準ディレクトリがクライアント依存になるため、基本的には絶対パスを指定します。
-
-このリポジトリでは、ローカル開発用の MCP 設定を `.mcp.json` に置いています。Claude Code など project-local の `.mcp.json` を読むクライアントでは、このファイルを使います。
-
-ローカル開発中に MCP クライアントへ手動設定する場合:
+MCP クライアントから起動する場合は、相対パスの基準ディレクトリがクライアント依存になるため、基本的には絶対パスを指定します。ローカル開発中に MCP クライアントへ設定する場合:
 
 ```json
 {
@@ -167,7 +172,7 @@ package 公開後に MCP クライアントから使う場合:
 
 ## 環境変数
 
-- `A5SQL_MCP_ROOTS`: 探索対象のルートディレクトリを追加します。複数指定する場合は OS の path delimiter で区切ります。
+現時点の CLI / MCP サーバーは、起動時に指定した単一ファイルを読み取ります。設定ディレクトリ探索用の環境変数はまだ公開 API として提供していません。
 
 ## セキュリティ方針
 
@@ -175,15 +180,3 @@ package 公開後に MCP クライアントから使う場合:
 - デフォルトではホスト名、DB 名、ユーザー名もマスクします。
 - ローカルファイルの読み取り専用です。
 - 接続先 DB へのクエリ実行は実装していません。
-
-## subagents の使い方
-
-このリポジトリでは、作業が分かれる場合に subagents を使います。役割の説明は `docs/subagents.md`、Codex 用の custom agent 定義は `.codex/agents/*.toml` にあります。
-
-- `a5sql-researcher`: A5:SQL の保存場所、ファイル形式、文字コードを調査する。
-- `mcp-designer`: MCP tool/resource の名前、入力、出力、エラー形式を設計する。
-- `parser-implementer`: `packages/parser` の A5:ER / SQL parser を実装・拡張する。
-- `security-reviewer`: 秘密情報マスク、ログ、読み取り専用境界を確認する。
-- `docs-maintainer`: README、AGENTS.md、SKILL.md、subagents.md を整える。
-
-複数 subagents を使う場合は、編集対象を分けます。たとえば parser 拡張は `parser-implementer`、MCP tool の追加は `mcp-designer`、漏えいリスク確認は `security-reviewer` に分けます。並行編集で衝突しないよう、同じファイルを複数 agent に触らせない方針です。

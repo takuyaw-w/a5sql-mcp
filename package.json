@@ -7,6 +7,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "local": "node packages/cli/dist/index.js",
+    "pack:check": "pnpm --filter @a5sql-mcp/parser pack --dry-run && pnpm --filter @a5sql-mcp/core pack --dry-run && pnpm --filter a5sql-mcp pack --dry-run",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },
