@@ -35,6 +35,7 @@
 - `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成する。`maxTables` で出力対象テーブル数を制限できる。
 - `generate_model_files`: `.a5er` ファイル内のテーブル定義から Laravel Eloquent または SQLAlchemy のモデルファイル案を生成する。ファイルシステムには書き込まない。`maxTables` で生成対象テーブル数を制限できる。
 - `review_a5sql_schema`: `.a5er` ファイル内のスキーマ品質を、主キー・型・コメント・リレーション整合性の観点でレビューする。
+- `compare_a5er_with_live_schema`: `.a5er` ファイル内の定義と、外部 DB MCP などから渡された live schema JSON を比較する。DB には接続せず、テーブル/カラム欠落、余剰、型、NULL 許容、主キー差分を返す。
 
 大きなファイルでは全量を一度に返さず、`truncated`、`hasMore`、総件数、返却件数を見て段階的に読む。
 

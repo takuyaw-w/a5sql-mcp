@@ -6,7 +6,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { parseFile } from "../src/index.js";
+import { compareA5erWithLiveSchemaInputSchema } from "../src/mcp/schema-compare/schemas.js";
 import {
+  compareA5erWithLiveSchema,
   findA5sqlTables,
   formatFullParsedFile,
   generateMermaidErDiagram,
@@ -272,6 +274,196 @@ describe("A5:ER MCP tool helpers", () => {
           code: "column_missing_data_type",
           table: "audit_logs",
           column: "details",
+        }),
+      ]),
+    );
+  });
+
+  it("compares parsed a5er schema with a live schema snapshot", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = compareA5erWithLiveSchema(parsed, {
+      liveSchema: {
+        dialect: "postgresql",
+        tables: [
+          {
+            name: "users",
+            columns: [
+              { name: "id", dataType: "bigint", nullable: false, primaryKey: true },
+              {
+                name: "email",
+                dataType: "character varying(255)",
+                nullable: false,
+                primaryKey: false,
+              },
+              {
+                name: "created_at",
+                dataType: "timestamp without time zone",
+                nullable: false,
+                primaryKey: false,
+              },
+            ],
+          },
+          {
+            name: "user_profiles",
+            columns: [
+              { name: "user_id", dataType: "bigint", nullable: false, primaryKey: true },
+              { name: "phone_number", dataType: "text", nullable: true, primaryKey: false },
+            ],
+          },
+          {
+            name: "orders",
+            columns: [
+              { name: "id", dataType: "bigint", nullable: false, primaryKey: false },
+              { name: "user_id", dataType: "bigint", nullable: true, primaryKey: false },
+            ],
+          },
+          {
+            name: "sessions",
+            columns: [{ name: "id", dataType: "uuid", nullable: false, primaryKey: true }],
+          },
+        ],
+      },
+    }) as {
+      found: boolean;
+      liveDialect: string;
+      matchedTableCount: number;
+      summary: { error: number; warning: number; info: number };
+      issues: Array<{
+        severity: string;
+        code: string;
+        table?: string;
+        column?: string;
+        a5er?: { normalizedDataType?: string };
+        live?: { normalizedDataType?: string };
+      }>;
+    };
+
+    expect(output.found).toBe(true);
+    expect(output.liveDialect).toBe("postgresql");
+    expect(output.matchedTableCount).toBe(3);
+    expect(output.summary.error).toBeGreaterThanOrEqual(3);
+    expect(output.summary.warning).toBeGreaterThanOrEqual(4);
+    expect(output.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "error",
+          code: "table_missing_in_live",
+          table: "audit_logs",
+        }),
+        expect.objectContaining({
+          severity: "warning",
+          code: "column_extra_in_live",
+          table: "users",
+          column: "created_at",
+        }),
+        expect.objectContaining({
+          severity: "warning",
+          code: "column_data_type_mismatch",
+          table: "user_profiles",
+          column: "phone_number",
+          a5er: expect.objectContaining({ normalizedDataType: "varchar(30)" }),
+          live: expect.objectContaining({ normalizedDataType: "text" }),
+        }),
+        expect.objectContaining({
+          severity: "error",
+          code: "column_primary_key_mismatch",
+          table: "orders",
+          column: "id",
+        }),
+        expect.objectContaining({
+          severity: "warning",
+          code: "column_nullable_mismatch",
+          table: "orders",
+          column: "user_id",
+        }),
+        expect.objectContaining({
+          severity: "error",
+          code: "column_missing_in_live",
+          table: "orders",
+          column: "order_number",
+        }),
+        expect.objectContaining({
+          severity: "warning",
+          code: "table_extra_in_live",
+          table: "sessions",
+        }),
+      ]),
+    );
+  });
+
+  it("does not expose live schema defaultValue values in compare output", async () => {
+    const parsed = await parseSampleA5er();
+    const secretDefault = "sk_live_secret_default_value";
+
+    const output = compareA5erWithLiveSchema(parsed, {
+      liveSchema: {
+        dialect: "postgresql",
+        tables: [
+          {
+            name: "users",
+            columns: [
+              { name: "id", dataType: "bigint", nullable: false, primaryKey: true },
+              {
+                name: "api_token",
+                dataType: "text",
+                nullable: false,
+                defaultValue: secretDefault,
+              },
+            ],
+          },
+        ],
+      },
+      tableNames: ["users"],
+    });
+
+    expect(JSON.stringify(output)).not.toContain(secretDefault);
+  });
+
+  it("counts all compare issues while returning at most maxIssues entries", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = compareA5erWithLiveSchema(parsed, {
+      liveSchema: {
+        tables: [],
+      },
+      maxIssues: 2,
+    }) as {
+      issueCount: number;
+      truncated: boolean;
+      maxIssues: number;
+      summary: { error: number; warning: number; info: number };
+      issues: Array<{ code: string }>;
+    };
+
+    expect(output.maxIssues).toBe(2);
+    expect(output.issues).toHaveLength(2);
+    expect(output.issues.length).toBeLessThanOrEqual(output.maxIssues);
+    expect(output.issueCount).toBe(4);
+    expect(output.truncated).toBe(true);
+    expect(output.summary).toEqual({ error: 4, warning: 0, info: 0 });
+  });
+
+  it("rejects live schema input above the total column limit", () => {
+    const liveSchema = {
+      tables: Array.from({ length: 11 }, (_, tableIndex) => ({
+        name: `table_${tableIndex}`,
+        columns: Array.from({ length: 2000 }, (_, columnIndex) => ({
+          name: `column_${tableIndex}_${columnIndex}`,
+        })),
+      })),
+    };
+
+    const result = compareA5erWithLiveSchemaInputSchema.liveSchema.safeParse(liveSchema);
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringContaining("総カラム数"),
         }),
       ]),
     );

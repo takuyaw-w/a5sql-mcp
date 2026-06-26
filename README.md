@@ -267,6 +267,7 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成します。`maxTables` で出力対象テーブル数を制限できます。
 - `generate_model_files`: `.a5er` ファイル内のテーブル定義から Laravel Eloquent または SQLAlchemy のモデルファイル案を生成します。ファイルシステムには書き込みません。`maxTables` で生成対象テーブル数を制限できます。
 - `review_a5sql_schema`: `.a5er` ファイル内のスキーマ品質を、主キー・型・コメント・リレーション整合性の観点でレビューします。
+- `compare_a5er_with_live_schema`: `.a5er` ファイル内の定義と、外部 DB MCP などから渡された live schema JSON を比較します。DB には接続せず、テーブル/カラム欠落、余剰、型、NULL 許容、主キー差分を返します。
 
 大きな `.a5er` ファイルでは、tool は `truncated`, `hasMore`, `total...Count` などのメタデータを返します。必要な範囲を `offset` / `limit`、`tableNames`、`maxTables` などで絞り込んでから詳細 tool を使う想定です。
 
