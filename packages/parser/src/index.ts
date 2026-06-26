@@ -12,30 +12,47 @@ type A5erSection = {
   entries: Map<string, string[]>;
 };
 
-export function parseA5erIni(text: string): ParsedA5erDocument {
+export type ParseA5erIniOptions = {
+  fileEncoding?: string;
+};
+
+export function parseA5erIni(text: string, options: ParseA5erIniOptions = {}): ParsedA5erDocument {
   const normalized = text.replace(/^\uFEFF/, "");
   const warnings: string[] = [];
   const sections = parseSections(normalized);
   const header = parseHeader(normalized);
+  const recognized = isRecognizedA5erDocument(header, sections);
+  if (!recognized) {
+    warnings.push("a5er_structure_not_recognized");
+  }
+  if (header.encoding && options.fileEncoding) {
+    const headerEncoding = normalizeEncodingName(header.encoding);
+    const fileEncoding = normalizeEncodingName(options.fileEncoding);
+    if (headerEncoding !== fileEncoding) {
+      warnings.push(`a5er_encoding_mismatch:${header.encoding}:${options.fileEncoding}`);
+    }
+  }
   const managerSection = sections.find((section) => equalsIgnoreCase(section.name, "Manager"));
   const manager = managerSection ? parseManager(managerSection) : {};
-  if (!managerSection) {
+  if (recognized && !managerSection) {
     warnings.push("manager_section_not_found");
   }
 
   const tables = sections
     .filter((section) => equalsAnyIgnoreCase(section.name, ["Entity", "View"]))
-    .map(parseTable)
+    .map((section) => parseTable(section, warnings))
     .filter((table): table is ParsedA5erTable => table !== null);
 
   const relationships = sections
     .filter((section) => equalsAnyIgnoreCase(section.name, ["Relation", "Relationship"]))
-    .map(parseRelationship)
+    .map((section) => parseRelationship(section, warnings))
     .filter((relationship): relationship is ParsedA5erRelationship => relationship !== null);
 
   return {
+    parseStatus: recognized ? "ok" : "unrecognized",
     formatVersion: header.formatVersion,
     encoding: header.encoding,
+    fileEncoding: options.fileEncoding,
     manager,
     tables,
     relationships,
@@ -50,6 +67,18 @@ function parseHeader(text: string): { formatVersion?: number; encoding?: string 
     formatVersion: formatMatch?.[1] ? Number(formatMatch[1]) : undefined,
     encoding: encodingMatch?.[1],
   };
+}
+
+function isRecognizedA5erDocument(
+  header: { formatVersion?: number; encoding?: string },
+  sections: A5erSection[],
+): boolean {
+  if (header.formatVersion !== undefined || header.encoding !== undefined) {
+    return true;
+  }
+  return sections.some((section) =>
+    equalsAnyIgnoreCase(section.name, ["Manager", "Entity", "View", "Relation", "Relationship"]),
+  );
 }
 
 function parseSections(text: string): A5erSection[] {
@@ -96,11 +125,12 @@ function parseManager(section: A5erSection): Record<string, unknown> {
   return result;
 }
 
-function parseTable(section: A5erSection): ParsedA5erTable | null {
+function parseTable(section: A5erSection, warnings: string[]): ParsedA5erTable | null {
   const physicalName = first(section, "PName");
   const logicalName = first(section, "LName");
   const name = physicalName ?? logicalName;
   if (!name) {
+    warnings.push(`table_missing_name:${section.name}`);
     return null;
   }
 
@@ -164,18 +194,22 @@ function parsePosition(value: string): ParsedA5erPosition | null {
   };
 }
 
-function parseRelationship(section: A5erSection): ParsedA5erRelationship | null {
+function parseRelationship(
+  section: A5erSection,
+  warnings: string[],
+): ParsedA5erRelationship | null {
   const entity1 = first(section, "Entity1");
   const entity2 = first(section, "Entity2");
   if (!entity1 && !entity2) {
+    warnings.push(`relationship_missing_entities:${first(section, "PName") ?? "unnamed"}`);
     return null;
   }
   return {
     name: emptyToUndefined(first(section, "PName")),
     entity1,
     entity2,
-    fields1: splitList(first(section, "Fields1")),
-    fields2: splitList(first(section, "Fields2")),
+    fields1: splitComplexList(first(section, "Fields1")),
+    fields2: splitComplexList(first(section, "Fields2")),
     relationType1: toNumber(first(section, "RelationType1")),
     relationType2: toNumber(first(section, "RelationType2")),
     caption: emptyToUndefined(first(section, "Caption")),
@@ -246,7 +280,7 @@ function decodeEscape(value: string): string {
     case "n":
       return "\n";
     default:
-      return value;
+      return `\\${value}`;
   }
 }
 
@@ -258,13 +292,31 @@ function all(section: A5erSection, key: string): string[] {
   return section.entries.get(key) ?? [];
 }
 
-function splitList(value: string | undefined): string[] {
+function splitComplexList(value: string | undefined): string[] {
   return value
-    ? value
-        .split(",")
+    ? parseComplexValue(value)
+        .map(stringifyComplexPart)
         .map((item) => item.trim())
         .filter(Boolean)
     : [];
+}
+
+function normalizeEncodingName(value: string): string {
+  const normalized = value.replace(/[^A-Za-z0-9]/g, "").toLocaleLowerCase();
+  switch (normalized) {
+    case "utf8":
+      return "utf8";
+    case "sjis":
+    case "shiftjis":
+    case "cp932":
+    case "windows31j":
+      return "shiftjis";
+    case "utf16":
+    case "utf16le":
+      return "utf16le";
+    default:
+      return normalized;
+  }
 }
 
 function stringifyComplexPart(value: unknown): string {

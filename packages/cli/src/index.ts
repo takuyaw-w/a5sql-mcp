@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TextDecoder } from "node:util";
 
 import { parseA5erIni, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
+
+import { readDecodedTextFile, type DecodedText } from "./text.js";
 
 export type CliResult = {
   filePath: string;
   kind: "a5er" | "sql" | "text";
+  encoding: string;
   parsed: unknown;
 };
 
@@ -56,26 +57,29 @@ function detectKind(filePath: string): CliResult["kind"] {
 
 export async function parseFile(fileArg: string): Promise<CliResult> {
   const filePath = path.resolve(fileArg);
-  const text = await readTextFile(filePath);
+  const decoded = await readTextFileWithMetadata(filePath);
   const kind = detectKind(filePath);
   const parsed =
     kind === "a5er"
-      ? parseA5erIni(text)
+      ? parseA5erIni(decoded.text, { fileEncoding: decoded.encoding })
       : kind === "sql"
-        ? { statements: parseSqlStatements(text) }
-        : { text };
+        ? { statements: parseSqlStatements(decoded.text) }
+        : { text: decoded.text };
 
   return {
     filePath,
     kind,
+    encoding: decoded.encoding,
     parsed,
   };
 }
 
 export async function readTextFile(filePath: string): Promise<string> {
-  const buffer = await readFile(filePath);
-  const decoder = new TextDecoder("utf-8", { fatal: false });
-  return decoder.decode(buffer).replace(/^\uFEFF/, "");
+  return (await readTextFileWithMetadata(filePath)).text;
+}
+
+export async function readTextFileWithMetadata(filePath: string): Promise<DecodedText> {
+  return readDecodedTextFile(filePath);
 }
 
 export function isCliEntrypoint(argvEntry: string | undefined, moduleUrl: string): boolean {

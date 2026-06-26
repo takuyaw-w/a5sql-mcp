@@ -1,6 +1,8 @@
 export type ParsedA5erDocument = {
+  parseStatus: "ok" | "unrecognized";
   formatVersion?: number;
   encoding?: string;
+  fileEncoding?: string;
   manager: Record<string, unknown>;
   tables: ParsedA5erTable[];
   relationships: ParsedA5erRelationship[];

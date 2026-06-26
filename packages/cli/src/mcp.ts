@@ -10,9 +10,19 @@ import type {
 } from "@takuyaw-w/a5sql-mcp-parser";
 import { z } from "zod";
 
-import { parseFile, readTextFile, type CliResult } from "./index.js";
+import { parseFile, readTextFileWithMetadata, type CliResult } from "./index.js";
 
 type JsonObject = Record<string, unknown>;
+
+const DEFAULT_PARSE_SUMMARY_LIMIT = 20;
+const DEFAULT_PARSE_FULL_TABLE_LIMIT = 100;
+const DEFAULT_PARSE_FULL_RELATIONSHIP_LIMIT = 200;
+const DEFAULT_PARSE_FULL_COLUMNS_PER_TABLE_LIMIT = 100;
+const DEFAULT_TABLE_LIST_LIMIT = 100;
+const DEFAULT_MERMAID_TABLE_LIMIT = 100;
+const DEFAULT_MODEL_TABLE_LIMIT = 20;
+const DEFAULT_JOIN_TABLE_LIMIT = 10;
+const DEFAULT_FILE_READ_MAX_CHARS = 100_000;
 
 export type A5erCliResult = CliResult & {
   kind: "a5er";
@@ -25,9 +35,14 @@ export type McpServerOptions = {
 
 export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void> {
   const initialFile = await parseFile(fileArg);
+  const initialFileStat = await stat(initialFile.filePath);
+  const getParsedFile = createParsedFileCache(initialFile, {
+    size: initialFileStat.size,
+    mtimeMs: initialFileStat.mtimeMs,
+  });
   const server = new McpServer({
     name: "a5sql-mcp",
-    version: "0.2.2",
+    version: "0.3.0",
   });
 
   server.registerTool(
@@ -39,11 +54,12 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
       inputSchema: {},
     },
     async () => {
-      const parsed = await parseFile(initialFile.filePath);
+      const parsed = await getParsedFile();
       const fileStat = await stat(parsed.filePath);
       return jsonResult({
         filePath: parsed.filePath,
         kind: parsed.kind,
+        encoding: parsed.encoding,
         sizeBytes: fileStat.size,
         modifiedAt: fileStat.mtime.toISOString(),
       });
@@ -56,11 +72,55 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
       title: "Parse configured A5:SQL file",
       description:
         "MCP サーバー起動時に指定された .a5er または .sql ファイルを AI が扱いやすい JSON に変換します。",
-      inputSchema: {},
+      inputSchema: {
+        mode: z
+          .enum(["summary", "full"])
+          .optional()
+          .describe(
+            "summary は件数と代表例だけを返します。full は解析結果全体を返します。省略時は summary。",
+          ),
+        summaryLimit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("summary で返す代表要素の最大件数。省略時は 20。"),
+        maxTables: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("full で返すテーブルの最大件数。省略時は 100。"),
+        maxRelationships: z
+          .number()
+          .int()
+          .min(1)
+          .max(1000)
+          .optional()
+          .describe("full で返すリレーションの最大件数。省略時は 200。"),
+        maxColumnsPerTable: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("full で各テーブルに返すカラムの最大件数。省略時は 100。"),
+      },
     },
-    async () => {
-      const parsed = await parseFile(initialFile.filePath);
-      return jsonResult(parsed);
+    async ({ mode, summaryLimit, maxTables, maxRelationships, maxColumnsPerTable }) => {
+      const parsed = await getParsedFile();
+      if (mode === "full") {
+        return jsonResult(
+          formatFullParsedFile(parsed, {
+            maxTables,
+            maxRelationships,
+            maxColumnsPerTable,
+          }),
+        );
+      }
+      return jsonResult(summarizeParsedFile(parsed, { limit: summaryLimit }));
     },
   );
 
@@ -78,24 +138,46 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
           .max(500_000)
           .optional()
           .describe("返す最大文字数。省略時は 100000。"),
+        offsetChars: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("読み取り開始位置を文字数で指定します。省略時は 0。"),
+        startLine: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("読み取り開始行を 1 始まりで指定します。指定時は offsetChars より優先します。"),
+        maxLines: z
+          .number()
+          .int()
+          .min(1)
+          .max(10_000)
+          .optional()
+          .describe("startLine 指定時に返す最大行数。省略時は maxChars の範囲で返します。"),
       },
     },
-    async ({ maxChars }) => {
-      const limit = maxChars ?? 100_000;
-      const text = await readTextFile(initialFile.filePath);
-      const truncated = text.length > limit;
-      return jsonResult({
-        filePath: initialFile.filePath,
-        kind: initialFile.kind,
-        text: truncated ? text.slice(0, limit) : text,
-        truncated,
-        totalChars: text.length,
-      });
+    async ({ maxChars, offsetChars, startLine, maxLines }) => {
+      const limit = maxChars ?? DEFAULT_FILE_READ_MAX_CHARS;
+      const decoded = await readTextFileWithMetadata(initialFile.filePath);
+      return jsonResult(
+        sliceFileText(decoded.text, {
+          filePath: initialFile.filePath,
+          kind: initialFile.kind,
+          encoding: decoded.encoding,
+          maxChars: limit,
+          offsetChars,
+          startLine,
+          maxLines,
+        }),
+      );
     },
   );
 
   if (initialFile.kind === "a5er") {
-    registerA5erTools(server, initialFile);
+    registerA5erTools(server, initialFile, getParsedFile);
   }
 
   const transport = new StdioServerTransport();
@@ -115,17 +197,46 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
   process.once("SIGTERM", shutdown);
 }
 
-function registerA5erTools(server: McpServer, initialFile: CliResult): void {
+type ParsedFileLoader = () => Promise<CliResult>;
+
+function createParsedFileCache(
+  initialFile: CliResult,
+  initialMetadata: { size: number; mtimeMs: number },
+): ParsedFileLoader {
+  let cached = initialFile;
+  let cachedSize = initialMetadata.size;
+  let cachedMtimeMs = initialMetadata.mtimeMs;
+
+  return async () => {
+    const fileStat = await stat(cached.filePath);
+    if (cachedSize === fileStat.size && cachedMtimeMs === fileStat.mtimeMs) {
+      return cached;
+    }
+    cached = await parseFile(cached.filePath);
+    cachedSize = fileStat.size;
+    cachedMtimeMs = fileStat.mtimeMs;
+    return cached;
+  };
+}
+
+function registerA5erTools(
+  server: McpServer,
+  initialFile: CliResult,
+  getParsedFile: ParsedFileLoader,
+): void {
   server.registerTool(
     "list_a5sql_tables",
     {
       title: "List tables in configured A5:ER file",
       description:
         "MCP サーバー起動時に指定された .a5er ファイルからテーブル/ビューの一覧を返します。",
-      inputSchema: {},
+      inputSchema: {
+        offset: z.number().int().min(0).optional().describe("返却開始位置。省略時は 0。"),
+        limit: z.number().int().min(1).max(500).optional().describe("返す最大件数。省略時は 100。"),
+      },
     },
-    async () => {
-      const parsed = await parseFile(initialFile.filePath);
+    async ({ offset, limit }) => {
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           filePath: parsed.filePath,
@@ -133,21 +244,10 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           tables: [],
         });
       }
-      return jsonResult({
-        filePath: parsed.filePath,
-        kind: parsed.kind,
-        tables: parsed.parsed.tables.map((table) => ({
-          name: table.name,
-          logicalName: table.logicalName,
-          physicalName: table.physicalName,
-          objectType: table.objectType,
-          columnCount: table.columns.length,
-          primaryKeyColumns: table.columns
-            .filter((column) => column.primaryKey)
-            .sort((a, b) => (a.keyOrder ?? 0) - (b.keyOrder ?? 0))
-            .map((column) => column.name),
-        })),
-      });
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed));
+      }
+      return jsonResult(listA5sqlTables(parsed, { offset, limit }));
     },
   );
 
@@ -162,7 +262,7 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
       },
     },
     async ({ tableName }) => {
-      const parsed = await parseFile(initialFile.filePath);
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           found: false,
@@ -170,6 +270,9 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           kind: parsed.kind,
           message: "configured_file_is_not_a5er",
         });
+      }
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { found: false, tableName }));
       }
       const lowerName = tableName.toLocaleLowerCase();
       const table = parsed.parsed.tables.find((candidate) =>
@@ -209,13 +312,16 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
       },
     },
     async ({ tableName }) => {
-      const parsed = await parseFile(initialFile.filePath);
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           filePath: parsed.filePath,
           kind: parsed.kind,
           relationships: [],
         });
+      }
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { tableName, relationships: [] }));
       }
       return jsonResult(listA5sqlRelationships(parsed, { tableName }));
     },
@@ -233,7 +339,7 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
       },
     },
     async ({ query, limit }) => {
-      const parsed = await parseFile(initialFile.filePath);
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           filePath: parsed.filePath,
@@ -241,6 +347,9 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           query,
           tables: [],
         });
+      }
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { query, tables: [] }));
       }
       return jsonResult(findA5sqlTables(parsed, { query, limit }));
     },
@@ -282,10 +391,24 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           .max(10000)
           .optional()
           .describe("任意。LIMIT 句を追加します。"),
+        maxRelatedTables: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe("includeRelations=true のときに JOIN する関連テーブルの最大数。省略時は 10。"),
       },
     },
-    async ({ tableName, includeRelations, relatedTables, whereColumns, limit }) => {
-      const parsed = await parseFile(initialFile.filePath);
+    async ({
+      tableName,
+      includeRelations,
+      relatedTables,
+      whereColumns,
+      limit,
+      maxRelatedTables,
+    }) => {
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           found: false,
@@ -294,6 +417,9 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           message: "configured_file_is_not_a5er",
         });
       }
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { found: false, tableName }));
+      }
       return jsonResult(
         generateSqlSelect(parsed, {
           tableName,
@@ -301,6 +427,7 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           relatedTables,
           whereColumns,
           limit,
+          maxRelatedTables,
         }),
       );
     },
@@ -326,10 +453,17 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           .boolean()
           .optional()
           .describe("true の場合、各テーブルのカラムも出力します。省略時は true。"),
+        maxTables: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("出力するテーブルの最大数。省略時は 100。"),
       },
     },
-    async ({ tableNames, includeViews, includeColumns }) => {
-      const parsed = await parseFile(initialFile.filePath);
+    async ({ tableNames, includeViews, includeColumns, maxTables }) => {
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           found: false,
@@ -338,11 +472,15 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           message: "configured_file_is_not_a5er",
         });
       }
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { found: false }));
+      }
       return jsonResult(
         generateMermaidErDiagram(parsed, {
           tableNames,
           includeViews,
           includeColumns,
+          maxTables,
         }),
       );
     },
@@ -363,10 +501,17 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           .max(100)
           .optional()
           .describe("任意。物理名または論理名で生成対象テーブルを絞ります。"),
+        maxTables: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("モデル生成するテーブルの最大数。省略時は 20。"),
       },
     },
-    async ({ framework, tableNames }) => {
-      const parsed = await parseFile(initialFile.filePath);
+    async ({ framework, tableNames, maxTables }) => {
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           found: false,
@@ -375,7 +520,10 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           message: "configured_file_is_not_a5er",
         });
       }
-      return jsonResult(generateModelFiles(parsed, { framework, tableNames }));
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { found: false }));
+      }
+      return jsonResult(generateModelFiles(parsed, { framework, tableNames, maxTables }));
     },
   );
 
@@ -400,7 +548,7 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
       },
     },
     async ({ maxIssues, includeInfo }) => {
-      const parsed = await parseFile(initialFile.filePath);
+      const parsed = await getParsedFile();
       if (!isA5erParsed(parsed)) {
         return jsonResult({
           found: false,
@@ -408,6 +556,9 @@ function registerA5erTools(server: McpServer, initialFile: CliResult): void {
           kind: parsed.kind,
           message: "configured_file_is_not_a5er",
         });
+      }
+      if (!isRecognizedA5erParsed(parsed)) {
+        return jsonResult(unrecognizedA5erResult(parsed, { found: false, issues: [] }));
       }
       return jsonResult(reviewA5sqlSchema(parsed, { maxIssues, includeInfo }));
     },
@@ -418,18 +569,20 @@ export function listA5sqlRelationships(
   result: A5erCliResult,
   options: { tableName?: string } = {},
 ): JsonObject {
-  const table = options.tableName ? findTable(result.parsed.tables, options.tableName) : undefined;
-  const relationships = result.parsed.relationships
-    .filter((relationship) => {
-      if (!options.tableName) {
-        return true;
-      }
-      if (!table) {
-        return false;
-      }
-      return relationship.entity1 === table.name || relationship.entity2 === table.name;
-    })
-    .map((relationship) => relationshipSummary(relationship, result.parsed.tables));
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { tableName: options.tableName, relationships: [] });
+  }
+  const index = buildA5erIndex(result.parsed);
+  const table = options.tableName ? findTable(index, options.tableName) : undefined;
+  const sourceRelationships =
+    options.tableName && table
+      ? (index.relationshipsByTable.get(table.name) ?? [])
+      : options.tableName
+        ? []
+        : result.parsed.relationships;
+  const relationships = sourceRelationships.map((relationship) =>
+    relationshipSummary(relationship, index),
+  );
   return {
     filePath: result.filePath,
     kind: result.kind,
@@ -439,10 +592,37 @@ export function listA5sqlRelationships(
   };
 }
 
+export function listA5sqlTables(
+  result: A5erCliResult,
+  options: { offset?: number; limit?: number } = {},
+): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { tables: [] });
+  }
+  const start = options.offset ?? 0;
+  const count = options.limit ?? DEFAULT_TABLE_LIST_LIMIT;
+  const tables = result.parsed.tables.slice(start, start + count);
+  const hasMore = start + tables.length < result.parsed.tables.length;
+  return {
+    filePath: result.filePath,
+    kind: result.kind,
+    totalTableCount: result.parsed.tables.length,
+    offset: start,
+    limit: count,
+    returnedTableCount: tables.length,
+    hasMore,
+    truncated: hasMore,
+    tables: tables.map(tableSummary),
+  };
+}
+
 export function findA5sqlTables(
   result: A5erCliResult,
   options: { query?: string; limit?: number } = {},
 ): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { query: options.query, tables: [] });
+  }
   const query = options.query?.trim();
   const limit = options.limit ?? 20;
   const normalizedQuery = query?.toLocaleLowerCase();
@@ -483,9 +663,14 @@ export function generateSqlSelect(
     relatedTables?: string[];
     whereColumns?: string[];
     limit?: number;
+    maxRelatedTables?: number;
   },
 ): JsonObject {
-  const baseTable = findTable(result.parsed.tables, options.tableName);
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, tableName: options.tableName });
+  }
+  const index = buildA5erIndex(result.parsed);
+  const baseTable = findTable(index, options.tableName);
   if (!baseTable) {
     return {
       found: false,
@@ -500,20 +685,15 @@ export function generateSqlSelect(
   const hasRelatedFilter = requestedRelatedTables.length > 0;
   const relatedFilter = new Set<string>();
   for (const tableName of requestedRelatedTables) {
-    const table = findTable(result.parsed.tables, tableName);
+    const table = findTable(index, tableName);
     if (table) {
       relatedFilter.add(table.name);
       continue;
     }
     warnings.push(`related_table_filter_not_found:${tableName}`);
   }
-  const joinCandidates = options.includeRelations
-    ? result.parsed.relationships.filter((relationship) => {
-        const direct =
-          relationship.entity1 === baseTable.name || relationship.entity2 === baseTable.name;
-        if (!direct) {
-          return false;
-        }
+  const allJoinCandidates = options.includeRelations
+    ? (index.relationshipsByTable.get(baseTable.name) ?? []).filter((relationship) => {
         if (!hasRelatedFilter) {
           return true;
         }
@@ -522,6 +702,13 @@ export function generateSqlSelect(
         return relatedName ? relatedFilter.has(relatedName) : false;
       })
     : [];
+  const maxRelatedTables = options.maxRelatedTables ?? DEFAULT_JOIN_TABLE_LIMIT;
+  const joinCandidates = allJoinCandidates.slice(0, maxRelatedTables);
+  if (allJoinCandidates.length > joinCandidates.length) {
+    warnings.push(
+      `related_table_output_truncated:${joinCandidates.length}/${allJoinCandidates.length}`,
+    );
+  }
 
   const aliases = new Map<string, string>([[baseTable.name, "t0"]]);
   const joinedTables: ParsedA5erTable[] = [];
@@ -534,7 +721,7 @@ export function generateSqlSelect(
     if (!relatedName || aliases.has(relatedName)) {
       continue;
     }
-    const relatedTable = result.parsed.tables.find((table) => table.name === relatedName);
+    const relatedTable = relatedName ? index.tablesByName.get(relatedName) : undefined;
     if (!relatedTable) {
       warnings.push(`related_table_not_found:${relatedName}`);
       continue;
@@ -601,6 +788,9 @@ export function generateSqlSelect(
       physicalName: baseTable.physicalName,
     },
     includeRelations: Boolean(options.includeRelations),
+    maxRelatedTables,
+    relatedRelationshipCount: allJoinCandidates.length,
+    truncated: allJoinCandidates.length > joinCandidates.length,
     includedTables: selectedTables.map((table) => table.name),
     parameters: validWhereColumns.map((columnName) => `:${columnName}`),
     sql: `${sqlLines.join("\n")};`,
@@ -614,16 +804,22 @@ export function generateMermaidErDiagram(
     tableNames?: string[];
     includeViews?: boolean;
     includeColumns?: boolean;
+    maxTables?: number;
   } = {},
 ): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false });
+  }
+  const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
   const includeViews = options.includeViews ?? true;
   const includeColumns = options.includeColumns ?? true;
+  const maxTables = options.maxTables ?? DEFAULT_MERMAID_TABLE_LIMIT;
   const requestedTables = options.tableNames ?? [];
   const requestedTableNames = new Set<string>();
 
   for (const tableName of requestedTables) {
-    const table = findTable(result.parsed.tables, tableName);
+    const table = findTable(index, tableName);
     if (table) {
       requestedTableNames.add(table.name);
       continue;
@@ -631,7 +827,7 @@ export function generateMermaidErDiagram(
     warnings.push(`table_filter_not_found:${tableName}`);
   }
 
-  const filteredTables = result.parsed.tables.filter((table) => {
+  const matchingTables = result.parsed.tables.filter((table) => {
     if (!includeViews && table.objectType === "view") {
       return false;
     }
@@ -640,6 +836,10 @@ export function generateMermaidErDiagram(
     }
     return requestedTableNames.has(table.name);
   });
+  const filteredTables = matchingTables.slice(0, maxTables);
+  if (matchingTables.length > filteredTables.length) {
+    warnings.push(`table_output_truncated:${filteredTables.length}/${matchingTables.length}`);
+  }
   const tableNameSet = new Set(filteredTables.map((table) => table.name));
   const entityNames = buildMermaidEntityNameMap(filteredTables);
   const lines = ["erDiagram"];
@@ -680,6 +880,7 @@ export function generateMermaidErDiagram(
     filePath: result.filePath,
     kind: result.kind,
     tableCount: filteredTables.length,
+    totalMatchedTableCount: matchingTables.length,
     relationshipCount: result.parsed.relationships.filter(
       (relationship) =>
         relationship.entity1 &&
@@ -687,6 +888,8 @@ export function generateMermaidErDiagram(
         tableNameSet.has(relationship.entity1) &&
         tableNameSet.has(relationship.entity2),
     ).length,
+    maxTables,
+    truncated: matchingTables.length > filteredTables.length,
     mermaid: lines.join("\n"),
     warnings,
   };
@@ -696,8 +899,12 @@ export function reviewA5sqlSchema(
   result: A5erCliResult,
   options: { maxIssues?: number; includeInfo?: boolean } = {},
 ): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, issues: [] });
+  }
   const maxIssues = options.maxIssues ?? 100;
   const includeInfo = options.includeInfo ?? true;
+  const index = buildA5erIndex(result.parsed);
   const tableNames = new Set(result.parsed.tables.map((table) => table.name));
   const relationshipColumnRefs = new Set<string>();
   const issues: SchemaReviewIssue[] = [];
@@ -712,8 +919,8 @@ export function reviewA5sqlSchema(
       });
       continue;
     }
-    const sourceTable = result.parsed.tables.find((table) => table.name === relationship.entity1);
-    const targetTable = result.parsed.tables.find((table) => table.name === relationship.entity2);
+    const sourceTable = index.tablesByName.get(relationship.entity1);
+    const targetTable = index.tablesByName.get(relationship.entity2);
     if (!sourceTable || !targetTable) {
       issues.push({
         severity: "error",
@@ -787,14 +994,20 @@ export function generateModelFiles(
   options: {
     framework: "laravel" | "sqlalchemy";
     tableNames?: string[];
+    maxTables?: number;
   },
 ): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, framework: options.framework });
+  }
+  const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
   const requestedTables = options.tableNames ?? [];
   const requestedTableNames = new Set<string>();
+  const maxTables = options.maxTables ?? DEFAULT_MODEL_TABLE_LIMIT;
 
   for (const tableName of requestedTables) {
-    const table = findTable(result.parsed.tables, tableName);
+    const table = findTable(index, tableName);
     if (table) {
       requestedTableNames.add(table.name);
       continue;
@@ -802,7 +1015,7 @@ export function generateModelFiles(
     warnings.push(`table_filter_not_found:${tableName}`);
   }
 
-  const tables = result.parsed.tables.filter((table) => {
+  const matchingTables = result.parsed.tables.filter((table) => {
     if (table.objectType !== "entity") {
       return false;
     }
@@ -811,6 +1024,10 @@ export function generateModelFiles(
     }
     return requestedTableNames.has(table.name);
   });
+  const tables = matchingTables.slice(0, maxTables);
+  if (matchingTables.length > tables.length) {
+    warnings.push(`table_output_truncated:${tables.length}/${matchingTables.length}`);
+  }
 
   const files =
     options.framework === "laravel"
@@ -822,8 +1039,238 @@ export function generateModelFiles(
     kind: result.kind,
     framework: options.framework,
     tableCount: tables.length,
+    totalMatchedTableCount: matchingTables.length,
+    maxTables,
+    truncated: matchingTables.length > tables.length,
     files,
     warnings,
+  };
+}
+
+export function formatFullParsedFile(
+  result: CliResult,
+  options: {
+    maxTables?: number;
+    maxRelationships?: number;
+    maxColumnsPerTable?: number;
+  } = {},
+): JsonObject {
+  if (!isA5erParsed(result)) {
+    return result;
+  }
+
+  const maxTables = options.maxTables ?? DEFAULT_PARSE_FULL_TABLE_LIMIT;
+  const maxRelationships = options.maxRelationships ?? DEFAULT_PARSE_FULL_RELATIONSHIP_LIMIT;
+  const maxColumnsPerTable =
+    options.maxColumnsPerTable ?? DEFAULT_PARSE_FULL_COLUMNS_PER_TABLE_LIMIT;
+  const limitedTables = result.parsed.tables.slice(0, maxTables).map((table) => ({
+    ...table,
+    columns: table.columns.slice(0, maxColumnsPerTable),
+    columnCount: table.columns.length,
+    columnsTruncated: table.columns.length > maxColumnsPerTable,
+  }));
+  const limitedRelationships = result.parsed.relationships.slice(0, maxRelationships);
+  const truncated = {
+    tables: result.parsed.tables.length > limitedTables.length,
+    relationships: result.parsed.relationships.length > limitedRelationships.length,
+    columns: limitedTables.some((table) => table.columnsTruncated),
+  };
+
+  return {
+    filePath: result.filePath,
+    kind: result.kind,
+    encoding: result.encoding,
+    mode: "full",
+    parseStatus: result.parsed.parseStatus,
+    formatVersion: result.parsed.formatVersion,
+    a5erEncoding: result.parsed.encoding,
+    fileEncoding: result.parsed.fileEncoding,
+    manager: result.parsed.manager,
+    totalTableCount: result.parsed.tables.length,
+    totalRelationshipCount: result.parsed.relationships.length,
+    maxTables,
+    maxRelationships,
+    maxColumnsPerTable,
+    truncated,
+    warnings: result.parsed.warnings,
+    tables: limitedTables,
+    relationships: limitedRelationships,
+    nextAction:
+      truncated.tables || truncated.relationships || truncated.columns
+        ? "list_a5sql_tables, describe_a5sql_table, list_a5sql_relationships で必要な範囲を絞ってください。"
+        : undefined,
+  };
+}
+
+function summarizeParsedFile(result: CliResult, options: { limit?: number } = {}): JsonObject {
+  const limit = options.limit ?? DEFAULT_PARSE_SUMMARY_LIMIT;
+  if (isA5erParsed(result)) {
+    const index = buildA5erIndex(result.parsed);
+    const tableSummaries = result.parsed.tables.slice(0, limit).map(tableSummary);
+    const relationshipSummaries = result.parsed.relationships
+      .slice(0, limit)
+      .map((relationship) => relationshipSummary(relationship, index));
+    return {
+      filePath: result.filePath,
+      kind: result.kind,
+      mode: "summary",
+      fileEncoding: result.encoding,
+      parseStatus: result.parsed.parseStatus,
+      formatVersion: result.parsed.formatVersion,
+      encoding: result.parsed.encoding,
+      tableCount: result.parsed.tables.length,
+      relationshipCount: result.parsed.relationships.length,
+      warningCount: result.parsed.warnings.length,
+      warnings: result.parsed.warnings,
+      summaryLimit: limit,
+      tables: tableSummaries,
+      relationships: relationshipSummaries,
+      truncated: {
+        tables: result.parsed.tables.length > tableSummaries.length,
+        relationships: result.parsed.relationships.length > relationshipSummaries.length,
+      },
+      nextAction:
+        "list_a5sql_tables, find_a5sql_tables, describe_a5sql_table で必要な範囲を絞ってください。全量が必要な場合は mode=full を指定してください。",
+    };
+  }
+
+  if (
+    result.kind === "sql" &&
+    typeof result.parsed === "object" &&
+    result.parsed !== null &&
+    "statements" in result.parsed &&
+    Array.isArray(result.parsed.statements)
+  ) {
+    const statements = result.parsed.statements.slice(0, limit);
+    return {
+      filePath: result.filePath,
+      kind: result.kind,
+      mode: "summary",
+      fileEncoding: result.encoding,
+      statementCount: result.parsed.statements.length,
+      summaryLimit: limit,
+      statements,
+      truncated: result.parsed.statements.length > statements.length,
+      nextAction: "全量が必要な場合は mode=full を指定してください。",
+    };
+  }
+
+  if (
+    result.kind === "text" &&
+    typeof result.parsed === "object" &&
+    result.parsed !== null &&
+    "text" in result.parsed &&
+    typeof result.parsed.text === "string"
+  ) {
+    const maxChars = Math.min(limit * 100, 10_000);
+    const text = result.parsed.text.slice(0, maxChars);
+    return {
+      filePath: result.filePath,
+      kind: result.kind,
+      mode: "summary",
+      fileEncoding: result.encoding,
+      totalChars: result.parsed.text.length,
+      previewChars: text.length,
+      text,
+      truncated: result.parsed.text.length > text.length,
+      nextAction: "read_a5sql_file で必要な範囲を指定するか、mode=full を指定してください。",
+    };
+  }
+
+  return {
+    filePath: result.filePath,
+    kind: result.kind,
+    mode: "summary",
+    fileEncoding: result.encoding,
+    parsed: result.parsed,
+  };
+}
+
+function isRecognizedA5erParsed(result: A5erCliResult): boolean {
+  return result.parsed.parseStatus === "ok";
+}
+
+function unrecognizedA5erResult(result: A5erCliResult, extra: JsonObject = {}): JsonObject {
+  return {
+    ...extra,
+    filePath: result.filePath,
+    kind: result.kind,
+    encoding: result.encoding,
+    parseStatus: result.parsed.parseStatus,
+    warnings: result.parsed.warnings,
+    message: "configured_a5er_file_is_not_recognized",
+    nextAction:
+      "parse_a5sql_file の summary と read_a5sql_file で、ファイル形式と文字コードを確認してください。",
+  };
+}
+
+export function sliceFileText(
+  text: string,
+  options: {
+    filePath: string;
+    kind: CliResult["kind"];
+    encoding?: string;
+    maxChars: number;
+    offsetChars?: number;
+    startLine?: number;
+    maxLines?: number;
+  },
+): JsonObject {
+  if (options.startLine !== undefined) {
+    const lines = text.split(/\r?\n/);
+    const startIndex = Math.max(options.startLine - 1, 0);
+    const endIndex =
+      options.maxLines === undefined
+        ? lines.length
+        : Math.min(startIndex + options.maxLines, lines.length);
+    const selectedText = lines.slice(startIndex, endIndex).join("\n");
+    const outputText = selectedText.slice(0, options.maxChars);
+    const charTruncated = selectedText.length > outputText.length;
+    const lineTruncated = endIndex < lines.length;
+    return {
+      filePath: options.filePath,
+      kind: options.kind,
+      encoding: options.encoding,
+      text: outputText,
+      totalChars: text.length,
+      totalLines: lines.length,
+      startLine: options.startLine,
+      maxLines: options.maxLines,
+      returnedLineCount: Math.max(endIndex - startIndex, 0),
+      maxChars: options.maxChars,
+      truncated: charTruncated || lineTruncated,
+      hasMore: charTruncated || lineTruncated,
+      nextStartLine: lineTruncated ? endIndex + 1 : undefined,
+    };
+  }
+
+  const offset = options.offsetChars ?? 0;
+  const outputText = text.slice(offset, offset + options.maxChars);
+  const nextOffset = offset + outputText.length;
+  const hasMore = nextOffset < text.length;
+  return {
+    filePath: options.filePath,
+    kind: options.kind,
+    encoding: options.encoding,
+    text: outputText,
+    totalChars: text.length,
+    offsetChars: offset,
+    maxChars: options.maxChars,
+    returnedChars: outputText.length,
+    truncated: hasMore,
+    hasMore,
+    nextOffsetChars: hasMore ? nextOffset : undefined,
+  };
+}
+
+function tableSummary(table: ParsedA5erTable): JsonObject {
+  return {
+    name: table.name,
+    logicalName: table.logicalName,
+    physicalName: table.physicalName,
+    objectType: table.objectType,
+    columnCount: table.columns.length,
+    primaryKeyColumns: primaryKeyColumns(table),
   };
 }
 
@@ -845,16 +1292,54 @@ type SchemaReviewIssue = {
   relationship?: string;
 };
 
+type A5erLookupIndex = {
+  tablesByName: Map<string, ParsedA5erTable>;
+  tablesByLookupName: Map<string, ParsedA5erTable>;
+  relationshipsByTable: Map<string, ParsedA5erRelationship[]>;
+};
+
+function buildA5erIndex(document: ParsedA5erDocument): A5erLookupIndex {
+  const tablesByName = new Map<string, ParsedA5erTable>();
+  const tablesByLookupName = new Map<string, ParsedA5erTable>();
+  const relationshipsByTable = new Map<string, ParsedA5erRelationship[]>();
+
+  for (const table of document.tables) {
+    tablesByName.set(table.name, table);
+    for (const name of [table.name, table.physicalName, table.logicalName]) {
+      if (!name) {
+        continue;
+      }
+      const key = normalizeLookupName(name);
+      if (!tablesByLookupName.has(key)) {
+        tablesByLookupName.set(key, table);
+      }
+    }
+  }
+
+  for (const relationship of document.relationships) {
+    for (const tableName of [relationship.entity1, relationship.entity2]) {
+      if (!tableName) {
+        continue;
+      }
+      const relationships = relationshipsByTable.get(tableName) ?? [];
+      relationships.push(relationship);
+      relationshipsByTable.set(tableName, relationships);
+    }
+  }
+
+  return {
+    tablesByName,
+    tablesByLookupName,
+    relationshipsByTable,
+  };
+}
+
 function relationshipSummary(
   relationship: ParsedA5erRelationship,
-  tables: ParsedA5erTable[],
+  index: A5erLookupIndex,
 ): JsonObject {
-  const source = relationship.entity1
-    ? tables.find((table) => table.name === relationship.entity1)
-    : undefined;
-  const target = relationship.entity2
-    ? tables.find((table) => table.name === relationship.entity2)
-    : undefined;
+  const source = relationship.entity1 ? index.tablesByName.get(relationship.entity1) : undefined;
+  const target = relationship.entity2 ? index.tablesByName.get(relationship.entity2) : undefined;
   return {
     name: relationship.name,
     caption: relationship.caption,
@@ -896,13 +1381,12 @@ function tableMatches(table: ParsedA5erTable, normalizedQuery: string): string[]
   return matches;
 }
 
-function findTable(tables: ParsedA5erTable[], tableName: string): ParsedA5erTable | undefined {
-  const lowerName = tableName.toLocaleLowerCase();
-  return tables.find((candidate) =>
-    [candidate.name, candidate.physicalName, candidate.logicalName]
-      .filter((value): value is string => value !== undefined)
-      .some((value) => value.toLocaleLowerCase() === lowerName),
-  );
+function findTable(index: A5erLookupIndex, tableName: string): ParsedA5erTable | undefined {
+  return index.tablesByLookupName.get(normalizeLookupName(tableName));
+}
+
+function normalizeLookupName(value: string): string {
+  return value.toLocaleLowerCase();
 }
 
 function primaryKeyColumns(table: ParsedA5erTable): string[] {

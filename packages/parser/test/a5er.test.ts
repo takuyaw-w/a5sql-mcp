@@ -36,6 +36,7 @@ describe("parseA5erIni", () => {
     `);
 
     expect(parsed.formatVersion).toBe(19);
+    expect(parsed.parseStatus).toBe("ok");
     expect(parsed.manager.ProjectName).toBe("Sample");
     expect(parsed.tables).toHaveLength(2);
     expect(parsed.tables[0]?.name).toBe("users");
@@ -58,5 +59,145 @@ describe("parseA5erIni", () => {
 
     expect(parsed.tables[0]?.columns[0]?.logicalName).toBe('引用"あり');
     expect(parsed.tables[0]?.columns[0]?.comment).toBe("line\nbreak");
+  });
+
+  it("preserves unknown backslash escapes", () => {
+    const parsed = parseA5erIni(`
+      [Entity]
+      PName=paths
+      Field="保存先","path","varchar(255)","",,,"C:\\data\\files",$FFFFFFFF,""
+    `);
+
+    expect(parsed.tables[0]?.columns[0]?.comment).toBe("C:\\data\\files");
+  });
+
+  it("parses quoted relationship fields with commas", () => {
+    const parsed = parseA5erIni(`
+      [Entity]
+      PName=source
+      Field="複合1","tenant,id","Integer","NOT NULL",0,"","",$FFFFFFFF,""
+
+      [Entity]
+      PName=target
+      Field="複合2","tenant,id","Integer","NOT NULL",0,"","",$FFFFFFFF,""
+
+      [Relation]
+      Entity1=source
+      Entity2=target
+      Fields1="tenant,id"
+      Fields2="tenant,id"
+    `);
+
+    expect(parsed.relationships[0]?.fields1).toEqual(["tenant,id"]);
+    expect(parsed.relationships[0]?.fields2).toEqual(["tenant,id"]);
+  });
+
+  it("marks unrecognized documents instead of returning a silent empty parse", () => {
+    const parsed = parseA5erIni("this is not an a5er document");
+
+    expect(parsed.parseStatus).toBe("unrecognized");
+    expect(parsed.warnings).toContain("a5er_structure_not_recognized");
+    expect(parsed.tables).toEqual([]);
+    expect(parsed.relationships).toEqual([]);
+  });
+
+  it("warns when declared encoding differs from decoded file encoding", () => {
+    const parsed = parseA5erIni(
+      `
+        # A5:ER FORMAT:19
+        # A5:ER ENCODING:SJIS
+        [Entity]
+        PName=users
+      `,
+      { fileEncoding: "utf-8" },
+    );
+
+    expect(parsed.parseStatus).toBe("ok");
+    expect(parsed.fileEncoding).toBe("utf-8");
+    expect(parsed.warnings).toContain("a5er_encoding_mismatch:SJIS:utf-8");
+  });
+
+  it("parses a realistic mixed A5:ER document shape", () => {
+    const parsed = parseA5erIni(`
+      # A5:ER FORMAT:19
+      # A5:ER ENCODING:UTF8
+
+      [Manager]
+      ProjectName="販売管理"
+      PageInfo="MAIN",3,"A4Landscape",$FFFFFF
+      PageInfo="SUB",1,"A4Portrait",$FFFFFF
+      DomainInfo="ID","bigint","NOT NULL"
+      CommonField="作成日時","created_at","timestamp","NOT NULL",,,"作成日時",$FFFFFFFF,""
+
+      [Entity]
+      PName=customers
+      LName=顧客
+      Comment=長いコメントを持つ顧客マスタ。外部連携から投入されるため、住所や連絡先は任意項目です。
+      Field="顧客ID","id","bigint","NOT NULL",0,"","顧客の一意なID",$FFFFFFFF,""
+      Field="顧客名","name","varchar(200)","NOT NULL",,"","",$FFFFFFFF,""
+      Field="備考","note","text",,,"","自由入力欄",$FFFFFFFF,""
+      Index=customers_ix1=0,name
+      Position="MAIN",100,200,320,240
+      Position="SUB",10,20,120,80
+
+      [View]
+      PName=active_customers
+      LName=有効顧客
+      Field="顧客ID","id","bigint","NOT NULL",,"","",$FFFFFFFF,""
+      Field="顧客名","name","varchar(200)","NOT NULL",,"","",$FFFFFFFF,""
+
+      [Relation]
+      PName=rel_missing_target
+      Entity1=customers
+      Fields1=id
+      Fields2=customer_id
+      Caption=target is intentionally omitted
+    `);
+
+    expect(parsed.parseStatus).toBe("ok");
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.manager.ProjectName).toBe("販売管理");
+    expect(parsed.manager.PageInfo).toHaveLength(2);
+    expect(parsed.manager.DomainInfo).toEqual([["ID", "bigint", "NOT NULL"]]);
+    expect(parsed.tables).toHaveLength(2);
+    expect(parsed.tables[0]).toEqual(
+      expect.objectContaining({
+        objectType: "entity",
+        name: "customers",
+        logicalName: "顧客",
+        comment:
+          "長いコメントを持つ顧客マスタ。外部連携から投入されるため、住所や連絡先は任意項目です。",
+      }),
+    );
+    expect(parsed.tables[0]?.columns).toHaveLength(3);
+    expect(parsed.tables[0]?.indexes[0]?.columns).toEqual(["name"]);
+    expect(parsed.tables[0]?.positions).toHaveLength(2);
+    expect(parsed.tables[1]).toEqual(
+      expect.objectContaining({
+        objectType: "view",
+        name: "active_customers",
+      }),
+    );
+    expect(parsed.relationships[0]).toEqual(
+      expect.objectContaining({
+        name: "rel_missing_target",
+        entity1: "customers",
+        entity2: undefined,
+        fields1: ["id"],
+        fields2: ["customer_id"],
+      }),
+    );
+  });
+
+  it("recognizes headerless documents when A5:ER sections are present", () => {
+    const parsed = parseA5erIni(`
+      [Entity]
+      PName=headerless
+      Field="ID","id","Integer","NOT NULL",0,"","",$FFFFFFFF,""
+    `);
+
+    expect(parsed.parseStatus).toBe("ok");
+    expect(parsed.warnings).toContain("manager_section_not_found");
+    expect(parsed.tables[0]?.name).toBe("headerless");
   });
 });

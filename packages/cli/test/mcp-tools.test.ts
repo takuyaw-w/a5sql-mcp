@@ -8,11 +8,14 @@ import { describe, expect, it } from "vitest";
 import { parseFile } from "../src/index.js";
 import {
   findA5sqlTables,
+  formatFullParsedFile,
   generateMermaidErDiagram,
   generateModelFiles,
   generateSqlSelect,
+  listA5sqlTables,
   listA5sqlRelationships,
   reviewA5sqlSchema,
+  sliceFileText,
   type A5erCliResult,
 } from "../src/mcp.js";
 
@@ -74,6 +77,46 @@ async function parseSampleA5er(): Promise<A5erCliResult> {
   return (await parseFile(filePath)) as A5erCliResult;
 }
 
+function buildLargeA5er(tableCount: number, columnsPerTable: number): string {
+  const lines = ["# A5:ER FORMAT:19", "# A5:ER ENCODING:UTF8", "[Manager]", 'ProjectName="Large"'];
+
+  for (let tableIndex = 0; tableIndex < tableCount; tableIndex += 1) {
+    const tableName = `table_${String(tableIndex).padStart(3, "0")}`;
+    lines.push(
+      "",
+      "[Entity]",
+      `PName=${tableName}`,
+      `LName=テーブル${tableIndex}`,
+      "Comment=large fixture",
+    );
+    for (let columnIndex = 0; columnIndex < columnsPerTable; columnIndex += 1) {
+      const columnName =
+        columnIndex === 0 ? "id" : columnIndex === 1 ? "table_000_id" : `column_${columnIndex}`;
+      const keyOrder = columnIndex === 0 ? "0" : "";
+      lines.push(
+        `Field="列${columnIndex}","${columnName}","Integer","NOT NULL",${keyOrder},"","fixture column",$FFFFFFFF,""`,
+      );
+    }
+  }
+
+  for (let relationIndex = 1; relationIndex <= 60; relationIndex += 1) {
+    const targetName = `table_${String(relationIndex).padStart(3, "0")}`;
+    lines.push(
+      "",
+      "[Relation]",
+      "Entity1=table_000",
+      `Entity2=${targetName}`,
+      "Fields1=id",
+      "Fields2=table_000_id",
+      "RelationType1=2",
+      "RelationType2=3",
+      `Caption=relates ${relationIndex}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
 describe("A5:ER MCP tool helpers", () => {
   it("lists relationships and can filter by table", async () => {
     const parsed = await parseSampleA5er();
@@ -97,6 +140,32 @@ describe("A5:ER MCP tool helpers", () => {
         caption: "has profile",
       }),
     ]);
+  });
+
+  it("uses lookup indexes for logical table names", async () => {
+    const parsed = await parseSampleA5er();
+
+    const relationships = listA5sqlRelationships(parsed, { tableName: "ユーザープロフィール" }) as {
+      foundTable: boolean;
+      relationships: Array<{ targetTable: string }>;
+    };
+    const select = generateSqlSelect(parsed, {
+      tableName: "ユーザー",
+      includeRelations: true,
+      relatedTables: ["注文"],
+    }) as {
+      found: boolean;
+      includedTables: string[];
+    };
+
+    expect(relationships.foundTable).toBe(true);
+    expect(relationships.relationships).toEqual([
+      expect.objectContaining({
+        targetTable: "user_profiles",
+      }),
+    ]);
+    expect(select.found).toBe(true);
+    expect(select.includedTables).toEqual(["users", "orders"]);
   });
 
   it("finds tables by column comment or logical name", async () => {
@@ -246,5 +315,155 @@ describe("A5:ER MCP tool helpers", () => {
     expect(output.files[0]?.content).toContain("class User(Base):");
     expect(output.files[0]?.content).toContain('__tablename__ = "orders"');
     expect(output.files[0]?.content).toContain('ForeignKey("users.id")');
+  });
+
+  it("handles large a5er files with paging and bounded generated output", async () => {
+    const source = buildLargeA5er(240, 45);
+    expect(source.split(/\r?\n/).length).toBeGreaterThan(11_000);
+
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-large-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, "large.a5er");
+    await writeFile(filePath, source, "utf8");
+    const parsed = (await parseFile(filePath)) as A5erCliResult;
+
+    expect(parsed.parsed.tables).toHaveLength(240);
+    expect(parsed.parsed.relationships).toHaveLength(60);
+
+    const tablePage = listA5sqlTables(parsed, { offset: 100, limit: 25 }) as {
+      totalTableCount: number;
+      returnedTableCount: number;
+      hasMore: boolean;
+      tables: Array<{ name: string; columnCount: number }>;
+    };
+    expect(tablePage.totalTableCount).toBe(240);
+    expect(tablePage.returnedTableCount).toBe(25);
+    expect(tablePage.hasMore).toBe(true);
+    expect(tablePage.tables[0]).toEqual(
+      expect.objectContaining({
+        name: "table_100",
+        columnCount: 45,
+      }),
+    );
+
+    const mermaid = generateMermaidErDiagram(parsed, {
+      includeColumns: false,
+      maxTables: 10,
+    }) as {
+      tableCount: number;
+      totalMatchedTableCount: number;
+      truncated: boolean;
+      warnings: string[];
+    };
+    expect(mermaid.tableCount).toBe(10);
+    expect(mermaid.totalMatchedTableCount).toBe(240);
+    expect(mermaid.truncated).toBe(true);
+    expect(mermaid.warnings).toContain("table_output_truncated:10/240");
+
+    const models = generateModelFiles(parsed, {
+      framework: "laravel",
+      maxTables: 3,
+    }) as {
+      tableCount: number;
+      totalMatchedTableCount: number;
+      truncated: boolean;
+      files: Array<{ path: string }>;
+      warnings: string[];
+    };
+    expect(models.tableCount).toBe(3);
+    expect(models.totalMatchedTableCount).toBe(240);
+    expect(models.files).toHaveLength(3);
+    expect(models.truncated).toBe(true);
+    expect(models.warnings).toContain("table_output_truncated:3/240");
+
+    const select = generateSqlSelect(parsed, {
+      tableName: "table_000",
+      includeRelations: true,
+      maxRelatedTables: 5,
+    }) as {
+      relatedRelationshipCount: number;
+      includedTables: string[];
+      truncated: boolean;
+      warnings: string[];
+    };
+    expect(select.relatedRelationshipCount).toBe(60);
+    expect(select.includedTables).toHaveLength(6);
+    expect(select.truncated).toBe(true);
+    expect(select.warnings).toContain("related_table_output_truncated:5/60");
+
+    const slice = sliceFileText(source, {
+      filePath,
+      kind: "a5er",
+      maxChars: 5_000,
+      startLine: 100,
+      maxLines: 20,
+    }) as {
+      totalLines: number;
+      returnedLineCount: number;
+      hasMore: boolean;
+      nextStartLine: number;
+    };
+    expect(slice.totalLines).toBeGreaterThan(11_000);
+    expect(slice.returnedLineCount).toBe(20);
+    expect(slice.hasMore).toBe(true);
+    expect(slice.nextStartLine).toBe(120);
+  });
+
+  it("bounds full parse output for large a5er files", async () => {
+    const source = buildLargeA5er(120, 30);
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-full-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, "large-full.a5er");
+    await writeFile(filePath, source, "utf8");
+    const parsed = (await parseFile(filePath)) as A5erCliResult;
+
+    const output = formatFullParsedFile(parsed, {
+      maxTables: 5,
+      maxRelationships: 7,
+      maxColumnsPerTable: 3,
+    }) as {
+      mode: string;
+      totalTableCount: number;
+      totalRelationshipCount: number;
+      truncated: { tables: boolean; relationships: boolean; columns: boolean };
+      tables: Array<{ columns: unknown[]; columnCount: number; columnsTruncated: boolean }>;
+      relationships: unknown[];
+    };
+
+    expect(output.mode).toBe("full");
+    expect(output.totalTableCount).toBe(120);
+    expect(output.totalRelationshipCount).toBe(60);
+    expect(output.tables).toHaveLength(5);
+    expect(output.relationships).toHaveLength(7);
+    expect(output.tables[0]?.columns).toHaveLength(3);
+    expect(output.tables[0]?.columnCount).toBe(30);
+    expect(output.tables[0]?.columnsTruncated).toBe(true);
+    expect(output.truncated).toEqual({
+      tables: true,
+      relationships: true,
+      columns: true,
+    });
+  });
+
+  it("returns explicit guidance for unrecognized a5er helper calls", async () => {
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-unrecognized-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, "broken.a5er");
+    await writeFile(filePath, "not an a5er document", "utf8");
+    const parsed = (await parseFile(filePath)) as A5erCliResult;
+
+    const output = listA5sqlTables(parsed) as {
+      parseStatus: string;
+      message: string;
+      warnings: string[];
+      tables: unknown[];
+      nextAction: string;
+    };
+
+    expect(output.parseStatus).toBe("unrecognized");
+    expect(output.message).toBe("configured_a5er_file_is_not_recognized");
+    expect(output.warnings).toContain("a5er_structure_not_recognized");
+    expect(output.tables).toEqual([]);
+    expect(output.nextAction).toContain("read_a5sql_file");
   });
 });
