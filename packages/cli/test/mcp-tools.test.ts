@@ -9,15 +9,20 @@ import { parseFile } from "../src/index.js";
 import { compareA5erWithLiveSchemaInputSchema } from "../src/mcp/schema-compare/schemas.js";
 import {
   compareA5erWithLiveSchema,
+  explainA5sqlTable,
+  findA5sqlColumns,
   findA5sqlTables,
   formatFullParsedFile,
+  generateMigrationPlan,
   generateMermaidErDiagram,
   generateModelFiles,
+  generateSchemaMarkdown,
   generateSqlSelect,
   listA5sqlTables,
   listA5sqlRelationships,
   reviewA5sqlSchema,
   sliceFileText,
+  suggestSchemaChanges,
   type A5erCliResult,
 } from "../src/mcp.js";
 
@@ -185,6 +190,55 @@ describe("A5:ER MCP tool helpers", () => {
     ]);
   });
 
+  it("finds columns across tables with filters and paging", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = findA5sqlColumns(parsed, {
+      query: "ユーザー",
+      onlyForeignKeyLike: true,
+      limit: 10,
+    }) as {
+      totalColumnCount: number;
+      columns: Array<{ table: string; name: string; matchedBy: string[] }>;
+    };
+
+    expect(output.totalColumnCount).toBeGreaterThanOrEqual(2);
+    expect(output.columns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          table: "user_profiles",
+          name: "user_id",
+          matchedBy: expect.arrayContaining(["columnLogicalName"]),
+        }),
+        expect.objectContaining({
+          table: "orders",
+          name: "user_id",
+        }),
+      ]),
+    );
+  });
+
+  it("explains a table with column profile and relationships", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = explainA5sqlTable(parsed, { tableName: "users" }) as {
+      found: boolean;
+      summary: string;
+      columnProfile: { primaryKeyColumns: Array<{ name: string }> };
+      relationships: { totalCount: number; tables: Array<{ table: string; direction: string }> };
+    };
+
+    expect(output.found).toBe(true);
+    expect(output.summary).toContain("users");
+    expect(output.columnProfile.primaryKeyColumns).toEqual([
+      expect.objectContaining({ name: "id" }),
+    ]);
+    expect(output.relationships.totalCount).toBe(2);
+    expect(output.relationships.tables).toEqual(
+      expect.arrayContaining([expect.objectContaining({ table: "orders", direction: "outgoing" })]),
+    );
+  });
+
   it("generates SELECT SQL with direct relationships and parameters", async () => {
     const parsed = await parseSampleA5er();
 
@@ -274,6 +328,35 @@ describe("A5:ER MCP tool helpers", () => {
           code: "column_missing_data_type",
           table: "audit_logs",
           column: "details",
+        }),
+      ]),
+    );
+  });
+
+  it("suggests actionable schema changes from review issues", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = suggestSchemaChanges(parsed, { includeInfo: false }) as {
+      suggestionCount: number;
+      suggestions: Array<{ category: string; table?: string; column?: string; action: string }>;
+    };
+
+    expect(output.suggestionCount).toBeGreaterThanOrEqual(3);
+    expect(output.suggestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "primary_key",
+          table: "audit_logs",
+        }),
+        expect.objectContaining({
+          category: "data_type",
+          table: "audit_logs",
+          column: "details",
+        }),
+        expect.objectContaining({
+          category: "relationship",
+          table: "audit_logs",
+          column: "user_id",
         }),
       ]),
     );
@@ -390,6 +473,64 @@ describe("A5:ER MCP tool helpers", () => {
         }),
       ]),
     );
+  });
+
+  it("generates migration plan suggestions from live schema differences", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = generateMigrationPlan(parsed, {
+      liveSchema: {
+        dialect: "postgresql",
+        tables: [
+          {
+            name: "users",
+            columns: [{ name: "id", dataType: "bigint", nullable: false, primaryKey: true }],
+          },
+        ],
+      },
+      tableNames: ["users", "orders"],
+      maxOperations: 5,
+    }) as {
+      operationCount: number;
+      operations: Array<{ kind: string; table: string; column?: string; statements: string[] }>;
+      plan: string;
+    };
+
+    expect(output.operationCount).toBeGreaterThanOrEqual(2);
+    expect(output.operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "add_column",
+          table: "users",
+          column: "email",
+        }),
+        expect.objectContaining({
+          kind: "create_table",
+          table: "orders",
+        }),
+      ]),
+    );
+    expect(output.plan).toContain("Migration Plan");
+    expect(output.operations[0]?.statements.join("\n")).toContain("ALTER TABLE");
+  });
+
+  it("generates Markdown schema documentation", async () => {
+    const parsed = await parseSampleA5er();
+
+    const output = generateSchemaMarkdown(parsed, {
+      tableNames: ["users", "orders"],
+    }) as {
+      tableCount: number;
+      markdown: string;
+      warnings: string[];
+    };
+
+    expect(output.tableCount).toBe(2);
+    expect(output.warnings).toEqual([]);
+    expect(output.markdown).toContain("# Schema Definition");
+    expect(output.markdown).toContain("## users");
+    expect(output.markdown).toContain("| id | ユーザーID | bigserial | yes | no |");
+    expect(output.markdown).toContain("| users | id | orders | user_id | places orders |");
   });
 
   it("does not expose live schema defaultValue values in compare output", async () => {

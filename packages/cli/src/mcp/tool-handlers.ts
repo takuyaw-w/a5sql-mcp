@@ -4,10 +4,14 @@ import { readTextFileWithMetadata, type CliResult } from "../index.js";
 import {
   compareA5erWithLiveSchema,
   describeA5sqlTable,
+  explainA5sqlTable,
   findA5sqlTables,
+  findA5sqlColumns,
   formatFullParsedFile,
+  generateMigrationPlan,
   generateMermaidErDiagram,
   generateModelFiles,
+  generateSchemaMarkdown,
   generateSqlSelect,
   isA5erParsed,
   isRecognizedA5erParsed,
@@ -15,6 +19,7 @@ import {
   listA5sqlTables,
   reviewA5sqlSchema,
   sliceFileText,
+  suggestSchemaChanges,
   summarizeParsedFile,
   type CompareA5erWithLiveSchemaOptions,
   unrecognizedA5erResult,
@@ -128,6 +133,30 @@ export function createDescribeA5sqlTableHandler(getParsedFile: ParsedFileLoader)
   };
 }
 
+export function createExplainA5sqlTableHandler(getParsedFile: ParsedFileLoader) {
+  return async ({
+    tableName,
+    maxRelatedTables,
+  }: {
+    tableName: string;
+    maxRelatedTables?: number;
+  }) => {
+    const parsed = await getParsedFile();
+    if (!isA5erParsed(parsed)) {
+      return jsonResult({
+        found: false,
+        filePath: parsed.filePath,
+        kind: parsed.kind,
+        message: "configured_file_is_not_a5er",
+      });
+    }
+    if (!isRecognizedA5erParsed(parsed)) {
+      return jsonResult(unrecognizedA5erResult(parsed, { found: false, tableName }));
+    }
+    return jsonResult(explainA5sqlTable(parsed, { tableName, maxRelatedTables }));
+  };
+}
+
 export function createListA5sqlRelationshipsHandler(getParsedFile: ParsedFileLoader) {
   return async ({ tableName }: { tableName?: string }) => {
     const parsed = await getParsedFile();
@@ -160,6 +189,50 @@ export function createFindA5sqlTablesHandler(getParsedFile: ParsedFileLoader) {
       return jsonResult(unrecognizedA5erResult(parsed, { query, tables: [] }));
     }
     return jsonResult(findA5sqlTables(parsed, { query, limit }));
+  };
+}
+
+export function createFindA5sqlColumnsHandler(getParsedFile: ParsedFileLoader) {
+  return async ({
+    query,
+    tableNames,
+    dataType,
+    onlyPrimaryKeys,
+    onlyForeignKeyLike,
+    offset,
+    limit,
+  }: {
+    query?: string;
+    tableNames?: string[];
+    dataType?: string;
+    onlyPrimaryKeys?: boolean;
+    onlyForeignKeyLike?: boolean;
+    offset?: number;
+    limit?: number;
+  }) => {
+    const parsed = await getParsedFile();
+    if (!isA5erParsed(parsed)) {
+      return jsonResult({
+        filePath: parsed.filePath,
+        kind: parsed.kind,
+        query,
+        columns: [],
+      });
+    }
+    if (!isRecognizedA5erParsed(parsed)) {
+      return jsonResult(unrecognizedA5erResult(parsed, { query, columns: [] }));
+    }
+    return jsonResult(
+      findA5sqlColumns(parsed, {
+        query,
+        tableNames,
+        dataType,
+        onlyPrimaryKeys,
+        onlyForeignKeyLike,
+        offset,
+        limit,
+      }),
+    );
   };
 }
 
@@ -283,6 +356,30 @@ export function createReviewA5sqlSchemaHandler(getParsedFile: ParsedFileLoader) 
   };
 }
 
+export function createSuggestSchemaChangesHandler(getParsedFile: ParsedFileLoader) {
+  return async ({
+    maxSuggestions,
+    includeInfo,
+  }: {
+    maxSuggestions?: number;
+    includeInfo?: boolean;
+  }) => {
+    const parsed = await getParsedFile();
+    if (!isA5erParsed(parsed)) {
+      return jsonResult({
+        found: false,
+        filePath: parsed.filePath,
+        kind: parsed.kind,
+        message: "configured_file_is_not_a5er",
+      });
+    }
+    if (!isRecognizedA5erParsed(parsed)) {
+      return jsonResult(unrecognizedA5erResult(parsed, { found: false, suggestions: [] }));
+    }
+    return jsonResult(suggestSchemaChanges(parsed, { maxSuggestions, includeInfo }));
+  };
+}
+
 export function createCompareA5erWithLiveSchemaHandler(getParsedFile: ParsedFileLoader) {
   return async ({
     liveSchema,
@@ -314,6 +411,80 @@ export function createCompareA5erWithLiveSchemaHandler(getParsedFile: ParsedFile
         comparePrimaryKeys,
         includeExtraLiveTables,
         maxIssues,
+      }),
+    );
+  };
+}
+
+export function createGenerateMigrationPlanHandler(getParsedFile: ParsedFileLoader) {
+  return async ({
+    liveSchema,
+    tableNames,
+    style,
+    includeDestructive,
+    maxOperations,
+  }: CompareA5erWithLiveSchemaOptions & {
+    style?: "plain_sql" | "laravel" | "alembic";
+    includeDestructive?: boolean;
+    maxOperations?: number;
+  }) => {
+    const parsed = await getParsedFile();
+    if (!isA5erParsed(parsed)) {
+      return jsonResult({
+        found: false,
+        filePath: parsed.filePath,
+        kind: parsed.kind,
+        message: "configured_file_is_not_a5er",
+      });
+    }
+    if (!isRecognizedA5erParsed(parsed)) {
+      return jsonResult(unrecognizedA5erResult(parsed, { found: false, operations: [] }));
+    }
+    return jsonResult(
+      generateMigrationPlan(parsed, {
+        liveSchema,
+        tableNames,
+        style,
+        includeDestructive,
+        maxOperations,
+      }),
+    );
+  };
+}
+
+export function createGenerateSchemaMarkdownHandler(getParsedFile: ParsedFileLoader) {
+  return async ({
+    tableNames,
+    includeRelationships,
+    includeViews,
+    maxTables,
+    maxColumnsPerTable,
+  }: {
+    tableNames?: string[];
+    includeRelationships?: boolean;
+    includeViews?: boolean;
+    maxTables?: number;
+    maxColumnsPerTable?: number;
+  }) => {
+    const parsed = await getParsedFile();
+    if (!isA5erParsed(parsed)) {
+      return jsonResult({
+        found: false,
+        filePath: parsed.filePath,
+        kind: parsed.kind,
+        message: "configured_file_is_not_a5er",
+      });
+    }
+    if (!isRecognizedA5erParsed(parsed)) {
+      return jsonResult(unrecognizedA5erResult(parsed, { found: false, markdown: "" }));
+    }
+    return jsonResult(
+      generateSchemaMarkdown(parsed, {
+        tableNames,
+        includeRelationships,
+        includeViews,
+        maxTables,
+        maxColumnsPerTable,
       }),
     );
   };

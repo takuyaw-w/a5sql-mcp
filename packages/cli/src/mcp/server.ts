@@ -8,29 +8,39 @@ import {
   createCompareA5erWithLiveSchemaHandler,
   createDescribeA5sqlFileHandler,
   createDescribeA5sqlTableHandler,
+  createExplainA5sqlTableHandler,
+  createFindA5sqlColumnsHandler,
   createFindA5sqlTablesHandler,
+  createGenerateMigrationPlanHandler,
   createGenerateMermaidErDiagramHandler,
   createGenerateModelFilesHandler,
+  createGenerateSchemaMarkdownHandler,
   createGenerateSqlSelectHandler,
   createListA5sqlRelationshipsHandler,
   createListA5sqlTablesHandler,
   createParseA5sqlFileHandler,
   createReadA5sqlFileHandler,
   createReviewA5sqlSchemaHandler,
+  createSuggestSchemaChangesHandler,
 } from "./tool-handlers.js";
 import {
   compareA5erWithLiveSchemaToolInputSchema,
   describeA5sqlFileInputSchema,
   describeA5sqlTableInputSchema,
+  explainA5sqlTableInputSchema,
+  findA5sqlColumnsInputSchema,
   findA5sqlTablesInputSchema,
+  generateMigrationPlanInputSchema,
   generateMermaidErDiagramInputSchema,
   generateModelFilesInputSchema,
+  generateSchemaMarkdownInputSchema,
   generateSqlSelectInputSchema,
   listA5sqlRelationshipsInputSchema,
   listA5sqlTablesInputSchema,
   parseA5sqlFileInputSchema,
   readA5sqlFileInputSchema,
   reviewA5sqlSchemaInputSchema,
+  suggestSchemaChangesInputSchema,
 } from "./tool-schemas.js";
 import type { ParsedFileLoader } from "./types.js";
 
@@ -148,6 +158,17 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
   );
 
   server.registerTool(
+    "explain_a5sql_table",
+    {
+      title: "Explain table in configured A5:ER file",
+      description:
+        "MCP サーバー起動時に指定された .a5er ファイル内のテーブルを、役割・主キー・関連テーブル・注意点つきで要約します。",
+      inputSchema: explainA5sqlTableInputSchema,
+    },
+    createExplainA5sqlTableHandler(getParsedFile),
+  );
+
+  server.registerTool(
     "list_a5sql_relationships",
     {
       title: "List relationships in configured A5:ER file",
@@ -166,6 +187,17 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
       inputSchema: findA5sqlTablesInputSchema,
     },
     createFindA5sqlTablesHandler(getParsedFile),
+  );
+
+  server.registerTool(
+    "find_a5sql_columns",
+    {
+      title: "Find columns in configured A5:ER file",
+      description:
+        "MCP サーバー起動時に指定された .a5er ファイルから、カラム名・論理名・コメント・型・テーブル名に一致するカラムを検索します。",
+      inputSchema: findA5sqlColumnsInputSchema,
+    },
+    createFindA5sqlColumnsHandler(getParsedFile),
   );
 
   server.registerTool(
@@ -202,6 +234,17 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
   );
 
   server.registerTool(
+    "generate_schema_markdown",
+    {
+      title: "Generate Markdown schema document from configured A5:ER file",
+      description:
+        "MCP サーバー起動時に指定された .a5er ファイルのテーブル定義とリレーションから Markdown の定義書案を生成します。ファイルシステムには書き込みません。",
+      inputSchema: generateSchemaMarkdownInputSchema,
+    },
+    createGenerateSchemaMarkdownHandler(getParsedFile),
+  );
+
+  server.registerTool(
     "review_a5sql_schema",
     {
       title: "Review schema quality in configured A5:ER file",
@@ -213,6 +256,17 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
   );
 
   server.registerTool(
+    "suggest_schema_changes",
+    {
+      title: "Suggest schema changes from configured A5:ER file",
+      description:
+        "MCP サーバー起動時に指定された .a5er ファイルのレビュー結果から、主キー・型・リレーション・コメントの改善提案を返します。",
+      inputSchema: suggestSchemaChangesInputSchema,
+    },
+    createSuggestSchemaChangesHandler(getParsedFile),
+  );
+
+  server.registerTool(
     "compare_a5er_with_live_schema",
     {
       title: "Compare configured A5:ER file with a live schema snapshot",
@@ -221,6 +275,17 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
       inputSchema: compareA5erWithLiveSchemaToolInputSchema,
     },
     createCompareA5erWithLiveSchemaHandler(getParsedFile),
+  );
+
+  server.registerTool(
+    "generate_migration_plan",
+    {
+      title: "Generate migration plan from configured A5:ER file and live schema",
+      description:
+        "MCP サーバー起動時に指定された .a5er ファイルと live schema JSON の差分から migration 案を生成します。DB には接続せず、実行もしません。",
+      inputSchema: generateMigrationPlanInputSchema,
+    },
+    createGenerateMigrationPlanHandler(getParsedFile),
   );
 }
 

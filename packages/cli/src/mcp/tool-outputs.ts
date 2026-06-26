@@ -6,6 +6,11 @@ import type {
 } from "@takuyaw-w/a5sql-mcp-parser";
 
 import type { CliResult } from "../index.js";
+import type {
+  LiveSchemaColumn,
+  LiveSchemaDocument,
+  LiveSchemaTable,
+} from "./schema-compare/types.js";
 import type { A5erCliResult, JsonObject } from "./types.js";
 export { compareA5erWithLiveSchema } from "./schema-compare/compare.js";
 export type { CompareA5erWithLiveSchemaOptions } from "./schema-compare/types.js";
@@ -18,6 +23,11 @@ const DEFAULT_TABLE_LIST_LIMIT = 100;
 const DEFAULT_MERMAID_TABLE_LIMIT = 100;
 const DEFAULT_MODEL_TABLE_LIMIT = 20;
 const DEFAULT_JOIN_TABLE_LIMIT = 10;
+const DEFAULT_COLUMN_SEARCH_LIMIT = 100;
+const DEFAULT_SCHEMA_MARKDOWN_TABLE_LIMIT = 100;
+const DEFAULT_SCHEMA_MARKDOWN_COLUMNS_PER_TABLE_LIMIT = 100;
+const DEFAULT_SCHEMA_SUGGESTION_LIMIT = 100;
+const DEFAULT_MIGRATION_OPERATION_LIMIT = 100;
 
 export function listA5sqlRelationships(
   result: A5erCliResult,
@@ -130,6 +140,174 @@ export function describeA5sqlTable(
     found: true,
     filePath: result.filePath,
     table,
+  };
+}
+
+export function explainA5sqlTable(
+  result: A5erCliResult,
+  options: { tableName: string; maxRelatedTables?: number },
+): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, tableName: options.tableName });
+  }
+  const index = buildA5erIndex(result.parsed);
+  const table = findTable(index, options.tableName);
+  if (!table) {
+    return {
+      found: false,
+      filePath: result.filePath,
+      tableName: options.tableName,
+      nextAction: "find_a5sql_tables で利用可能な tableName を確認してください。",
+    };
+  }
+
+  const maxRelatedTables = options.maxRelatedTables ?? DEFAULT_JOIN_TABLE_LIMIT;
+  const relationships = index.relationshipsByTable.get(table.name) ?? [];
+  const relatedTables = relationships
+    .map((relationship) => relatedTableSummary(table, relationship, index))
+    .filter((value): value is JsonObject => value !== undefined);
+  const limitedRelatedTables = relatedTables.slice(0, maxRelatedTables);
+  const primaryKeys = table.columns.filter((column) => column.primaryKey);
+  const requiredColumns = table.columns.filter((column) => column.nullable === false);
+  const foreignKeyLikeColumns = table.columns.filter(
+    (column) => looksLikeForeignKeyColumn(column.name) && !column.primaryKey,
+  );
+  const missingDataTypeColumns = table.columns.filter((column) => !column.dataType);
+  const descriptionParts = [
+    table.logicalName ? `${table.logicalName} (${table.name})` : table.name,
+    table.objectType === "view"
+      ? "View として定義されています。"
+      : "Entity として定義されています。",
+    `${table.columns.length} カラム、${relationships.length} リレーションを持ちます。`,
+    primaryKeys.length > 0
+      ? `主キーは ${primaryKeys.map((column) => column.name).join(", ")} です。`
+      : "主キーが見つかりません。",
+  ];
+
+  return {
+    found: true,
+    filePath: result.filePath,
+    kind: result.kind,
+    table: {
+      name: table.name,
+      logicalName: table.logicalName,
+      physicalName: table.physicalName,
+      objectType: table.objectType,
+      comment: table.comment,
+      columnCount: table.columns.length,
+      primaryKeyColumns: primaryKeyColumns(table),
+    },
+    summary: descriptionParts.join(" "),
+    columnProfile: {
+      primaryKeyColumns: primaryKeys.map(columnProfile),
+      requiredColumns: requiredColumns.map(columnProfile),
+      foreignKeyLikeColumns: foreignKeyLikeColumns.map(columnProfile),
+      missingDataTypeColumns: missingDataTypeColumns.map(columnProfile),
+    },
+    relationships: {
+      totalCount: relatedTables.length,
+      returnedCount: limitedRelatedTables.length,
+      truncated: relatedTables.length > limitedRelatedTables.length,
+      tables: limitedRelatedTables,
+    },
+    notes: [
+      primaryKeys.length === 0
+        ? "主キーがないため、モデル生成や差分管理で確認が必要です。"
+        : undefined,
+      foreignKeyLikeColumns.length > relationships.length
+        ? "外部キーらしいカラムの一部は A5:ER リレーションに未接続の可能性があります。"
+        : undefined,
+      missingDataTypeColumns.length > 0
+        ? "データ型が未設定のカラムがあります。migration 生成前に確認してください。"
+        : undefined,
+    ].filter((value): value is string => value !== undefined),
+  };
+}
+
+export function findA5sqlColumns(
+  result: A5erCliResult,
+  options: {
+    query?: string;
+    tableNames?: string[];
+    dataType?: string;
+    onlyPrimaryKeys?: boolean;
+    onlyForeignKeyLike?: boolean;
+    offset?: number;
+    limit?: number;
+  } = {},
+): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { query: options.query, columns: [] });
+  }
+  const index = buildA5erIndex(result.parsed);
+  const warnings: string[] = [];
+  const requestedTables = options.tableNames ?? [];
+  const requestedTableNames = new Set<string>();
+  for (const tableName of requestedTables) {
+    const table = findTable(index, tableName);
+    if (table) {
+      requestedTableNames.add(table.name);
+      continue;
+    }
+    warnings.push(`table_filter_not_found:${tableName}`);
+  }
+
+  const query = options.query?.trim();
+  const normalizedQuery = query?.toLocaleLowerCase();
+  const normalizedDataType = options.dataType?.trim().toLocaleLowerCase();
+  const matches = result.parsed.tables.flatMap((table) => {
+    if (requestedTables.length > 0 && !requestedTableNames.has(table.name)) {
+      return [];
+    }
+    return table.columns
+      .map((column) => {
+        const matchedBy = columnMatches(table, column, normalizedQuery, normalizedDataType);
+        return { table, column, matchedBy };
+      })
+      .filter(({ column, matchedBy }) => {
+        if (normalizedQuery || normalizedDataType) {
+          if (matchedBy.length === 0) {
+            return false;
+          }
+        }
+        if (options.onlyPrimaryKeys && !column.primaryKey) {
+          return false;
+        }
+        if (options.onlyForeignKeyLike && !looksLikeForeignKeyColumn(column.name)) {
+          return false;
+        }
+        return true;
+      });
+  });
+  const offset = options.offset ?? 0;
+  const limit = options.limit ?? DEFAULT_COLUMN_SEARCH_LIMIT;
+  const page = matches.slice(offset, offset + limit);
+
+  return {
+    filePath: result.filePath,
+    kind: result.kind,
+    query,
+    dataType: options.dataType,
+    tableNames: requestedTables,
+    totalColumnCount: matches.length,
+    offset,
+    limit,
+    returnedColumnCount: page.length,
+    hasMore: offset + page.length < matches.length,
+    truncated: offset + page.length < matches.length,
+    columns: page.map(({ table, column, matchedBy }) => ({
+      table: table.name,
+      tableLogicalName: table.logicalName,
+      name: column.name,
+      logicalName: column.logicalName,
+      physicalName: column.physicalName,
+      dataType: column.dataType,
+      nullable: column.nullable,
+      primaryKey: column.primaryKey,
+      comment: column.comment,
+      matchedBy,
+    })),
+    warnings,
   };
 }
 
@@ -276,6 +454,201 @@ export function generateSqlSelect(
   };
 }
 
+export function suggestSchemaChanges(
+  result: A5erCliResult,
+  options: { maxSuggestions?: number; includeInfo?: boolean } = {},
+): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, suggestions: [] });
+  }
+  const includeInfo = options.includeInfo ?? true;
+  const maxSuggestions = options.maxSuggestions ?? DEFAULT_SCHEMA_SUGGESTION_LIMIT;
+  const review = reviewA5sqlSchema(result, {
+    maxIssues: Math.max(maxSuggestions * 3, maxSuggestions),
+    includeInfo,
+  }) as {
+    issueCount: number;
+    summary: Record<string, number>;
+    issues: SchemaReviewIssue[];
+  };
+  const suggestions = review.issues
+    .map(schemaReviewIssueToSuggestion)
+    .filter((suggestion): suggestion is JsonObject => suggestion !== undefined);
+  const limitedSuggestions = suggestions.slice(0, maxSuggestions);
+
+  return {
+    filePath: result.filePath,
+    kind: result.kind,
+    tableCount: result.parsed.tables.length,
+    relationshipCount: result.parsed.relationships.length,
+    issueCount: review.issueCount,
+    suggestionCount: suggestions.length,
+    returnedSuggestionCount: limitedSuggestions.length,
+    maxSuggestions,
+    truncated: suggestions.length > limitedSuggestions.length,
+    summary: review.summary,
+    suggestions: limitedSuggestions,
+    nextAction: "提案は設計レビュー用です。A5:ER ファイル、DB、生成ファイルには書き込みません。",
+  };
+}
+
+export function generateMigrationPlan(
+  result: A5erCliResult,
+  options: {
+    liveSchema: LiveSchemaDocument;
+    style?: "plain_sql" | "laravel" | "alembic";
+    tableNames?: string[];
+    includeDestructive?: boolean;
+    maxOperations?: number;
+  },
+): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, operations: [] });
+  }
+  const style = options.style ?? "plain_sql";
+  const includeDestructive = options.includeDestructive ?? false;
+  const maxOperations = options.maxOperations ?? DEFAULT_MIGRATION_OPERATION_LIMIT;
+  const index = buildA5erIndex(result.parsed);
+  const liveIndex = buildLiveSchemaLookup(options.liveSchema);
+  const warnings: string[] = [];
+  const requestedTables = options.tableNames ?? [];
+  const requestedTableNames = new Set<string>();
+  for (const tableName of requestedTables) {
+    const table = findTable(index, tableName);
+    if (table) {
+      requestedTableNames.add(table.name);
+      continue;
+    }
+    warnings.push(`table_filter_not_found:${tableName}`);
+  }
+
+  const operations: MigrationOperation[] = [];
+  const matchedLiveTables = new Set<string>();
+  const a5erTables = result.parsed.tables.filter((table) => {
+    if (requestedTables.length === 0) {
+      return true;
+    }
+    return requestedTableNames.has(table.name);
+  });
+
+  for (const table of a5erTables) {
+    const liveTable = findLiveSchemaTable(liveIndex, table);
+    if (!liveTable) {
+      operations.push({
+        kind: "create_table",
+        destructive: false,
+        table: table.name,
+        reason: "A5:ER に存在するテーブルが live schema にありません。",
+        statements: renderMigrationStatements(style, "create_table", table),
+      });
+      continue;
+    }
+    matchedLiveTables.add(liveTable.key);
+    const liveColumns = buildLiveColumnLookup(liveTable.table);
+    const matchedLiveColumns = new Set<string>();
+    for (const column of table.columns) {
+      const liveColumn = findLiveColumnByA5erColumn(liveColumns, column);
+      if (!liveColumn) {
+        operations.push({
+          kind: "add_column",
+          destructive: false,
+          table: table.name,
+          column: column.name,
+          reason: "A5:ER に存在するカラムが live schema にありません。",
+          statements: renderMigrationStatements(style, "add_column", table, column),
+        });
+        continue;
+      }
+      matchedLiveColumns.add(normalizeLookupName(liveColumn.name));
+      if (
+        column.dataType &&
+        liveColumn.dataType &&
+        !sameDataType(column.dataType, liveColumn.dataType)
+      ) {
+        operations.push({
+          kind: "alter_column_type",
+          destructive: false,
+          table: table.name,
+          column: column.name,
+          reason: "A5:ER と live schema の型が一致しません。",
+          statements: renderMigrationStatements(style, "alter_column_type", table, column),
+        });
+      }
+      if (liveColumn.nullable !== undefined) {
+        const a5erNullable = column.nullable ?? true;
+        if (a5erNullable !== liveColumn.nullable) {
+          operations.push({
+            kind: "alter_column_nullable",
+            destructive: false,
+            table: table.name,
+            column: column.name,
+            reason: "A5:ER と live schema の NULL 許容が一致しません。",
+            statements: renderMigrationStatements(style, "alter_column_nullable", table, column),
+          });
+        }
+      }
+    }
+
+    for (const liveColumn of liveTable.table.columns) {
+      if (matchedLiveColumns.has(normalizeLookupName(liveColumn.name))) {
+        continue;
+      }
+      if (includeDestructive) {
+        operations.push({
+          kind: "drop_column",
+          destructive: true,
+          table: table.name,
+          column: liveColumn.name,
+          reason: "live schema にだけ存在するカラムです。",
+          statements: renderMigrationStatements(style, "drop_column", table, undefined, liveColumn),
+        });
+      } else {
+        warnings.push(`extra_live_column_skipped:${table.name}.${liveColumn.name}`);
+      }
+    }
+  }
+
+  if (includeDestructive && requestedTables.length === 0) {
+    for (const liveTable of liveIndex.tables) {
+      if (matchedLiveTables.has(liveTable.key)) {
+        continue;
+      }
+      operations.push({
+        kind: "drop_table",
+        destructive: true,
+        table: liveTable.table.name,
+        reason: "live schema にだけ存在するテーブルです。",
+        statements: renderMigrationStatements(
+          style,
+          "drop_table",
+          undefined,
+          undefined,
+          undefined,
+          liveTable.table,
+        ),
+      });
+    }
+  }
+
+  const limitedOperations = operations.slice(0, maxOperations);
+  return {
+    found: true,
+    filePath: result.filePath,
+    kind: result.kind,
+    style,
+    includeDestructive,
+    operationCount: operations.length,
+    returnedOperationCount: limitedOperations.length,
+    maxOperations,
+    truncated: operations.length > limitedOperations.length,
+    operations: limitedOperations,
+    plan: renderMigrationPlan(style, limitedOperations),
+    warnings,
+    nextAction:
+      "migration plan は案です。実行前に DB 方言、既存データ、制約名、インデックスを確認してください。",
+  };
+}
+
 export function generateMermaidErDiagram(
   result: A5erCliResult,
   options: {
@@ -369,6 +742,123 @@ export function generateMermaidErDiagram(
     maxTables,
     truncated: matchingTables.length > filteredTables.length,
     mermaid: lines.join("\n"),
+    warnings,
+  };
+}
+
+export function generateSchemaMarkdown(
+  result: A5erCliResult,
+  options: {
+    tableNames?: string[];
+    includeRelationships?: boolean;
+    includeViews?: boolean;
+    maxTables?: number;
+    maxColumnsPerTable?: number;
+  } = {},
+): JsonObject {
+  if (!isRecognizedA5erParsed(result)) {
+    return unrecognizedA5erResult(result, { found: false, markdown: "" });
+  }
+  const index = buildA5erIndex(result.parsed);
+  const warnings: string[] = [];
+  const includeRelationships = options.includeRelationships ?? true;
+  const includeViews = options.includeViews ?? true;
+  const maxTables = options.maxTables ?? DEFAULT_SCHEMA_MARKDOWN_TABLE_LIMIT;
+  const maxColumnsPerTable =
+    options.maxColumnsPerTable ?? DEFAULT_SCHEMA_MARKDOWN_COLUMNS_PER_TABLE_LIMIT;
+  const requestedTables = options.tableNames ?? [];
+  const requestedTableNames = new Set<string>();
+  for (const tableName of requestedTables) {
+    const table = findTable(index, tableName);
+    if (table) {
+      requestedTableNames.add(table.name);
+      continue;
+    }
+    warnings.push(`table_filter_not_found:${tableName}`);
+  }
+
+  const matchingTables = result.parsed.tables.filter((table) => {
+    if (!includeViews && table.objectType === "view") {
+      return false;
+    }
+    if (requestedTables.length === 0) {
+      return true;
+    }
+    return requestedTableNames.has(table.name);
+  });
+  const tables = matchingTables.slice(0, maxTables);
+  if (matchingTables.length > tables.length) {
+    warnings.push(`table_output_truncated:${tables.length}/${matchingTables.length}`);
+  }
+  const tableNameSet = new Set(tables.map((table) => table.name));
+  const lines = [
+    "# Schema Definition",
+    "",
+    `- Source: ${result.filePath}`,
+    `- Tables: ${tables.length}/${matchingTables.length}`,
+    `- Relationships: ${result.parsed.relationships.length}`,
+    "",
+  ];
+
+  for (const table of tables) {
+    lines.push(
+      `## ${markdownCell(table.name)}${table.logicalName ? ` (${markdownCell(table.logicalName)})` : ""}`,
+    );
+    if (table.comment) {
+      lines.push("", table.comment, "");
+    } else {
+      lines.push("");
+    }
+    lines.push("| Column | Logical Name | Type | PK | Null | Comment |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
+    const columns = table.columns.slice(0, maxColumnsPerTable);
+    for (const column of columns) {
+      lines.push(
+        `| ${markdownCell(column.name)} | ${markdownCell(column.logicalName)} | ${markdownCell(column.dataType)} | ${column.primaryKey ? "yes" : ""} | ${column.nullable === false ? "no" : "yes"} | ${markdownCell(column.comment)} |`,
+      );
+    }
+    if (table.columns.length > columns.length) {
+      lines.push(
+        `| ... | ... | ... | ... | ... | ${table.columns.length - columns.length} columns omitted |`,
+      );
+      warnings.push(
+        `column_output_truncated:${table.name}:${columns.length}/${table.columns.length}`,
+      );
+    }
+    lines.push("");
+  }
+
+  if (includeRelationships) {
+    lines.push("## Relationships", "");
+    lines.push("| Source | Columns | Target | Columns | Caption |");
+    lines.push("| --- | --- | --- | --- | --- |");
+    for (const relationship of result.parsed.relationships) {
+      if (
+        !relationship.entity1 ||
+        !relationship.entity2 ||
+        !tableNameSet.has(relationship.entity1) ||
+        !tableNameSet.has(relationship.entity2)
+      ) {
+        continue;
+      }
+      lines.push(
+        `| ${markdownCell(relationship.entity1)} | ${markdownCell(relationship.fields1.join(", "))} | ${markdownCell(relationship.entity2)} | ${markdownCell(relationship.fields2.join(", "))} | ${markdownCell(relationship.caption ?? relationship.name)} |`,
+      );
+    }
+    lines.push("");
+  }
+
+  return {
+    filePath: result.filePath,
+    kind: result.kind,
+    tableCount: tables.length,
+    totalMatchedTableCount: matchingTables.length,
+    maxTables,
+    maxColumnsPerTable,
+    truncated:
+      matchingTables.length > tables.length ||
+      warnings.some((warning) => warning.startsWith("column_output_truncated:")),
+    markdown: lines.join("\n"),
     warnings,
   };
 }
@@ -773,10 +1263,30 @@ type SchemaReviewIssue = {
   relationship?: string;
 };
 
+type MigrationOperation = {
+  kind:
+    | "create_table"
+    | "add_column"
+    | "alter_column_type"
+    | "alter_column_nullable"
+    | "drop_column"
+    | "drop_table";
+  destructive: boolean;
+  table: string;
+  column?: string;
+  reason: string;
+  statements: string[];
+};
+
 type A5erLookupIndex = {
   tablesByName: Map<string, ParsedA5erTable>;
   tablesByLookupName: Map<string, ParsedA5erTable>;
   relationshipsByTable: Map<string, ParsedA5erRelationship[]>;
+};
+
+type LiveSchemaLookup = {
+  tables: Array<{ key: string; table: LiveSchemaTable }>;
+  tablesByName: Map<string, { key: string; table: LiveSchemaTable }>;
 };
 
 function buildA5erIndex(document: ParsedA5erDocument): A5erLookupIndex {
@@ -835,6 +1345,41 @@ function relationshipSummary(
   };
 }
 
+function relatedTableSummary(
+  table: ParsedA5erTable,
+  relationship: ParsedA5erRelationship,
+  index: A5erLookupIndex,
+): JsonObject | undefined {
+  const relatedName =
+    relationship.entity1 === table.name ? relationship.entity2 : relationship.entity1;
+  if (!relatedName) {
+    return undefined;
+  }
+  const relatedTable = index.tablesByName.get(relatedName);
+  return {
+    table: relatedName,
+    logicalName: relatedTable?.logicalName,
+    direction: relationship.entity1 === table.name ? "outgoing" : "incoming",
+    sourceColumns:
+      relationship.entity1 === table.name ? relationship.fields1 : relationship.fields2,
+    targetColumns:
+      relationship.entity1 === table.name ? relationship.fields2 : relationship.fields1,
+    caption: relationship.caption,
+    relationship: relationship.name,
+  };
+}
+
+function columnProfile(column: ParsedA5erColumn): JsonObject {
+  return {
+    name: column.name,
+    logicalName: column.logicalName,
+    dataType: column.dataType,
+    nullable: column.nullable,
+    primaryKey: column.primaryKey,
+    comment: column.comment,
+  };
+}
+
 function tableMatches(table: ParsedA5erTable, normalizedQuery: string): string[] {
   const matches: string[] = [];
   const tableFields = [
@@ -860,6 +1405,35 @@ function tableMatches(table: ParsedA5erTable, normalizedQuery: string): string[]
     }
   }
   return matches;
+}
+
+function columnMatches(
+  table: ParsedA5erTable,
+  column: ParsedA5erColumn,
+  normalizedQuery: string | undefined,
+  normalizedDataType: string | undefined,
+): string[] {
+  const matches: string[] = [];
+  if (normalizedQuery) {
+    const fields = [
+      ["tableName", table.name],
+      ["tableLogicalName", table.logicalName],
+      ["columnName", column.name],
+      ["columnPhysicalName", column.physicalName],
+      ["columnLogicalName", column.logicalName],
+      ["comment", column.comment],
+      ["dataType", column.dataType],
+    ] as const;
+    for (const [field, value] of fields) {
+      if (value?.toLocaleLowerCase().includes(normalizedQuery)) {
+        matches.push(field);
+      }
+    }
+  }
+  if (normalizedDataType && column.dataType?.toLocaleLowerCase().includes(normalizedDataType)) {
+    matches.push("dataType");
+  }
+  return [...new Set(matches)];
 }
 
 function findTable(index: A5erLookupIndex, tableName: string): ParsedA5erTable | undefined {
@@ -1052,6 +1626,95 @@ function reviewColumn(
   }
 }
 
+function schemaReviewIssueToSuggestion(issue: SchemaReviewIssue): JsonObject | undefined {
+  switch (issue.code) {
+    case "table_without_primary_key":
+      return {
+        priority: "high",
+        category: "primary_key",
+        table: issue.table,
+        title: "主キーを追加する",
+        reason: issue.message,
+        action: "業務キーまたは surrogate key を確認し、A5:ER 上で主キーを設定してください。",
+      };
+    case "column_missing_data_type":
+      return {
+        priority: "high",
+        category: "data_type",
+        table: issue.table,
+        column: issue.column,
+        title: "カラム型を設定する",
+        reason: issue.message,
+        action: "実DBの型または想定する値域に合わせて dataType を設定してください。",
+      };
+    case "relationship_table_not_found":
+    case "relationship_column_not_found":
+    case "relationship_column_count_mismatch":
+      return {
+        priority: "high",
+        category: "relationship",
+        table: issue.table,
+        column: issue.column,
+        relationship: issue.relationship,
+        title: "リレーション定義を確認する",
+        reason: issue.message,
+        action:
+          "接続元/接続先テーブルとカラム数を確認し、A5:ER の relationship を修正してください。",
+      };
+    case "foreign_key_like_column_without_relationship":
+      return {
+        priority: issue.severity === "warning" ? "medium" : "low",
+        category: "relationship",
+        table: issue.table,
+        column: issue.column,
+        title: "外部キー候補にリレーションを追加する",
+        reason: issue.message,
+        action: "参照先テーブルを確認し、A5:ER relationship として接続してください。",
+      };
+    case "primary_key_nullable_unknown":
+      return {
+        priority: "medium",
+        category: "nullability",
+        table: issue.table,
+        column: issue.column,
+        title: "主キーを NOT NULL として明示する",
+        reason: issue.message,
+        action: "主キー列に NOT NULL を設定してください。",
+      };
+    case "table_missing_comment":
+      return {
+        priority: "low",
+        category: "documentation",
+        table: issue.table,
+        title: "テーブルコメントを追加する",
+        reason: issue.message,
+        action: "テーブルの責務が分かるコメントを追加してください。",
+      };
+    case "column_missing_description":
+      return {
+        priority: "low",
+        category: "documentation",
+        table: issue.table,
+        column: issue.column,
+        title: "カラム説明を追加する",
+        reason: issue.message,
+        action: "論理名またはコメントを追加してください。",
+      };
+    default:
+      return {
+        priority:
+          issue.severity === "error" ? "high" : issue.severity === "warning" ? "medium" : "low",
+        category: "schema",
+        table: issue.table,
+        column: issue.column,
+        relationship: issue.relationship,
+        title: "スキーマ定義を確認する",
+        reason: issue.message,
+        action: "A5:ER 定義と実DBの期待値を確認してください。",
+      };
+  }
+}
+
 function looksLikeForeignKeyColumn(columnName: string): boolean {
   return /(^|_)id$/i.test(columnName) && columnName.toLocaleLowerCase() !== "id";
 }
@@ -1071,6 +1734,304 @@ function summarizeIssues(issues: SchemaReviewIssue[]): Record<string, number> {
     summary[issue.severity] += 1;
   }
   return summary;
+}
+
+function buildLiveSchemaLookup(liveSchema: LiveSchemaDocument): LiveSchemaLookup {
+  const tables: Array<{ key: string; table: LiveSchemaTable }> = [];
+  const tablesByName = new Map<string, { key: string; table: LiveSchemaTable }>();
+  for (const table of liveSchema.tables) {
+    const key = table.schema ? `${table.schema}.${table.name}` : table.name;
+    const indexed = { key, table };
+    tables.push(indexed);
+    for (const name of [table.name, key]) {
+      const lookupKey = normalizeLookupName(name);
+      if (!tablesByName.has(lookupKey)) {
+        tablesByName.set(lookupKey, indexed);
+      }
+    }
+  }
+  return { tables, tablesByName };
+}
+
+function findLiveSchemaTable(
+  liveIndex: LiveSchemaLookup,
+  table: ParsedA5erTable,
+): { key: string; table: LiveSchemaTable } | undefined {
+  for (const name of [table.name, table.physicalName, table.logicalName]) {
+    if (!name) {
+      continue;
+    }
+    const liveTable = liveIndex.tablesByName.get(normalizeLookupName(name));
+    if (liveTable) {
+      return liveTable;
+    }
+  }
+  return undefined;
+}
+
+function buildLiveColumnLookup(table: LiveSchemaTable): Map<string, LiveSchemaColumn> {
+  const columns = new Map<string, LiveSchemaColumn>();
+  for (const column of table.columns) {
+    const key = normalizeLookupName(column.name);
+    if (!columns.has(key)) {
+      columns.set(key, column);
+    }
+  }
+  return columns;
+}
+
+function findLiveColumnByA5erColumn(
+  liveColumns: Map<string, LiveSchemaColumn>,
+  column: ParsedA5erColumn,
+): LiveSchemaColumn | undefined {
+  for (const name of [column.name, column.physicalName, column.logicalName]) {
+    if (!name) {
+      continue;
+    }
+    const liveColumn = liveColumns.get(normalizeLookupName(name));
+    if (liveColumn) {
+      return liveColumn;
+    }
+  }
+  return undefined;
+}
+
+function sameDataType(a5erType: string, liveType: string): boolean {
+  return normalizeTypeForPlan(a5erType) === normalizeTypeForPlan(liveType);
+}
+
+function normalizeTypeForPlan(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[`"[\]]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+not null\b/g, "")
+    .trim();
+}
+
+function renderMigrationStatements(
+  style: "plain_sql" | "laravel" | "alembic",
+  kind: MigrationOperation["kind"],
+  table?: ParsedA5erTable,
+  column?: ParsedA5erColumn,
+  liveColumn?: LiveSchemaColumn,
+  liveTable?: LiveSchemaTable,
+): string[] {
+  const tableName = table?.name ?? liveTable?.name ?? "unknown_table";
+  const columnName = column?.name ?? liveColumn?.name ?? "unknown_column";
+  if (kind === "create_table" && table) {
+    if (style === "laravel") {
+      return renderLaravelCreateTableStatement(table);
+    }
+    if (style === "alembic") {
+      return renderAlembicCreateTableStatement(table);
+    }
+    return renderPlainSqlCreateTableStatement(table);
+  }
+  if (style === "laravel") {
+    return renderLaravelMigrationStatement(kind, tableName, columnName, column);
+  }
+  if (style === "alembic") {
+    return renderAlembicMigrationStatement(kind, tableName, columnName, column);
+  }
+  return renderPlainSqlMigrationStatement(kind, tableName, columnName, column);
+}
+
+function renderPlainSqlCreateTableStatement(table: ParsedA5erTable): string[] {
+  const columns =
+    table.columns.length > 0
+      ? table.columns.map((column) => `  ${plainSqlColumnDefinition(column)}`)
+      : ["  -- TODO: add columns from A5:ER definition"];
+  return [`CREATE TABLE ${quoteIdentifier(table.name)} (`, columns.join(",\n"), ");"];
+}
+
+function renderLaravelCreateTableStatement(table: ParsedA5erTable): string[] {
+  const lines = [
+    `Schema::create('${table.name}', function (Blueprint $table) {`,
+    ...(table.columns.length > 0
+      ? table.columns.map((column) => `    ${laravelColumnExpression(column)};`)
+      : ["    // TODO: add columns from A5:ER definition"]),
+    "});",
+  ];
+  return lines;
+}
+
+function renderAlembicCreateTableStatement(table: ParsedA5erTable): string[] {
+  const columns =
+    table.columns.length > 0
+      ? table.columns.map(
+          (column) =>
+            `    sa.Column("${column.name}", ${alembicColumnType(column)}, nullable=${column.nullable === false || column.primaryKey ? "False" : "True"}${column.primaryKey ? ", primary_key=True" : ""}),`,
+        )
+      : ["    # TODO: add columns from A5:ER definition"];
+  return [`op.create_table("${table.name}",`, ...columns, ")"];
+}
+
+function renderPlainSqlMigrationStatement(
+  kind: MigrationOperation["kind"],
+  tableName: string,
+  columnName: string,
+  column?: ParsedA5erColumn,
+): string[] {
+  switch (kind) {
+    case "create_table":
+      return [
+        `CREATE TABLE ${quoteIdentifier(tableName)} (`,
+        column
+          ? `  ${plainSqlColumnDefinition(column)}`
+          : "  -- TODO: add columns from A5:ER definition",
+        ");",
+      ];
+    case "add_column":
+      return [
+        `ALTER TABLE ${quoteIdentifier(tableName)} ADD COLUMN ${column ? plainSqlColumnDefinition(column) : quoteIdentifier(columnName)};`,
+      ];
+    case "alter_column_type":
+      return [
+        `ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN ${quoteIdentifier(columnName)} TYPE ${column?.dataType ?? "TEXT"};`,
+      ];
+    case "alter_column_nullable":
+      return [
+        `ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN ${quoteIdentifier(columnName)} ${column?.nullable === false ? "SET NOT NULL" : "DROP NOT NULL"};`,
+      ];
+    case "drop_column":
+      return [
+        `ALTER TABLE ${quoteIdentifier(tableName)} DROP COLUMN ${quoteIdentifier(columnName)};`,
+      ];
+    case "drop_table":
+      return [`DROP TABLE ${quoteIdentifier(tableName)};`];
+  }
+}
+
+function renderLaravelMigrationStatement(
+  kind: MigrationOperation["kind"],
+  tableName: string,
+  columnName: string,
+  column?: ParsedA5erColumn,
+): string[] {
+  switch (kind) {
+    case "create_table":
+      return [
+        `Schema::create('${tableName}', function (Blueprint $table) {`,
+        "    // TODO: add columns from A5:ER definition",
+        "});",
+      ];
+    case "add_column":
+      return [
+        `Schema::table('${tableName}', function (Blueprint $table) {`,
+        `    ${laravelColumnExpression(column ?? ({ name: columnName } as ParsedA5erColumn))};`,
+        "});",
+      ];
+    case "alter_column_type":
+    case "alter_column_nullable":
+      return [
+        `Schema::table('${tableName}', function (Blueprint $table) {`,
+        `    ${laravelColumnExpression(column ?? ({ name: columnName } as ParsedA5erColumn))}->change();`,
+        "});",
+      ];
+    case "drop_column":
+      return [
+        `Schema::table('${tableName}', function (Blueprint $table) {`,
+        `    $table->dropColumn('${columnName}');`,
+        "});",
+      ];
+    case "drop_table":
+      return [`Schema::dropIfExists('${tableName}');`];
+  }
+}
+
+function renderAlembicMigrationStatement(
+  kind: MigrationOperation["kind"],
+  tableName: string,
+  columnName: string,
+  column?: ParsedA5erColumn,
+): string[] {
+  switch (kind) {
+    case "create_table":
+      return [`op.create_table("${tableName}", sa.Column("id", sa.Integer(), primary_key=True))`];
+    case "add_column":
+      return [
+        `op.add_column("${tableName}", sa.Column("${columnName}", ${alembicColumnType(column)}, nullable=${column?.nullable === false ? "False" : "True"}))`,
+      ];
+    case "alter_column_type":
+      return [
+        `op.alter_column("${tableName}", "${columnName}", type_=${alembicColumnType(column)})`,
+      ];
+    case "alter_column_nullable":
+      return [
+        `op.alter_column("${tableName}", "${columnName}", nullable=${column?.nullable === false ? "False" : "True"})`,
+      ];
+    case "drop_column":
+      return [`op.drop_column("${tableName}", "${columnName}")`];
+    case "drop_table":
+      return [`op.drop_table("${tableName}")`];
+  }
+}
+
+function plainSqlColumnDefinition(column: ParsedA5erColumn): string {
+  return [
+    quoteIdentifier(column.name),
+    column.dataType ?? "TEXT",
+    column.nullable === false || column.primaryKey ? "NOT NULL" : undefined,
+    column.primaryKey ? "PRIMARY KEY" : undefined,
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join(" ");
+}
+
+function laravelColumnExpression(column: ParsedA5erColumn): string {
+  const type = column.dataType?.toLocaleLowerCase() ?? "";
+  const method = /(bigint|bigserial)/.test(type)
+    ? "bigInteger"
+    : /(int|integer|serial|smallint)/.test(type)
+      ? "integer"
+      : /(bool|boolean)/.test(type)
+        ? "boolean"
+        : /(timestamp|datetime)/.test(type)
+          ? "dateTime"
+          : /(date)/.test(type)
+            ? "date"
+            : /(text)/.test(type)
+              ? "text"
+              : "string";
+  const suffixes = [
+    column.nullable === false || column.primaryKey ? undefined : "->nullable()",
+    column.primaryKey ? "->primary()" : undefined,
+  ].filter((value): value is string => value !== undefined);
+  return `$table->${method}('${column.name}')${suffixes.join("")}`;
+}
+
+function alembicColumnType(column: ParsedA5erColumn | undefined): string {
+  const mapped = sqlAlchemyType(column?.dataType);
+  return `sa.${mapped.sqlalchemyType}()`;
+}
+
+function renderMigrationPlan(
+  style: "plain_sql" | "laravel" | "alembic",
+  operations: MigrationOperation[],
+): string {
+  if (operations.length === 0) {
+    return "No migration operations are suggested.";
+  }
+  const lines = [`# Migration Plan (${style})`, ""];
+  for (const [index, operation] of operations.entries()) {
+    lines.push(
+      `## ${index + 1}. ${operation.kind}: ${operation.table}${operation.column ? `.${operation.column}` : ""}`,
+      "",
+      operation.reason,
+      "",
+      "```",
+      ...operation.statements,
+      "```",
+      "",
+    );
+  }
+  return lines.join("\n");
+}
+
+function markdownCell(value: string | undefined): string {
+  return (value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
 function generateLaravelModelFile(

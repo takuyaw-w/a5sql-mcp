@@ -29,13 +29,18 @@
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返す。`offsetChars`、または `startLine` / `maxLines` で読み取り範囲を絞れる。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返す。`offset` / `limit` によるページングに対応し、デフォルトは 100 件。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返す。
+- `explain_a5sql_table`: `.a5er` ファイル内の特定テーブルを、役割・主キー・関連テーブル・注意点つきで要約する。
 - `list_a5sql_relationships`: `.a5er` ファイル内のリレーション一覧を返す。
 - `find_a5sql_tables`: `.a5er` ファイル内のテーブルを、テーブル名・論理名・コメント・カラム名から検索する。
+- `find_a5sql_columns`: `.a5er` ファイル内のカラムを、カラム名・論理名・コメント・型・テーブル名から検索する。
 - `generate_sql_select`: `.a5er` ファイル内の定義から SELECT SQL のたたき台を生成する。DB には接続しない。`maxRelatedTables` で JOIN 対象の上限を指定できる。
 - `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成する。`maxTables` で出力対象テーブル数を制限できる。
 - `generate_model_files`: `.a5er` ファイル内のテーブル定義から Laravel Eloquent または SQLAlchemy のモデルファイル案を生成する。ファイルシステムには書き込まない。`maxTables` で生成対象テーブル数を制限できる。
+- `generate_schema_markdown`: `.a5er` ファイル内のテーブル定義とリレーションから Markdown の定義書案を生成する。ファイルシステムには書き込まない。
 - `review_a5sql_schema`: `.a5er` ファイル内のスキーマ品質を、主キー・型・コメント・リレーション整合性の観点でレビューする。
+- `suggest_schema_changes`: `.a5er` ファイル内のスキーマ品質レビュー結果から、主キー・型・リレーション・コメントの改善提案を返す。
 - `compare_a5er_with_live_schema`: `.a5er` ファイル内の定義と、外部 DB MCP などから渡された live schema JSON を比較する。DB には接続せず、テーブル/カラム欠落、余剰、型、NULL 許容、主キー差分を返す。
+- `generate_migration_plan`: `.a5er` ファイル内の定義と live schema JSON の差分から migration 案を生成する。DB には接続せず、実行しない。
 
 大きなファイルでは全量を一度に返さず、`truncated`、`hasMore`、総件数、返却件数を見て段階的に読む。
 
