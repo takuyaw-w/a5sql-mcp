@@ -34,6 +34,7 @@
 ### Task 1: Add Failing MCP Handler Tests
 
 **Files:**
+
 - Modify: `packages/cli/test/mcp-asset-tools.test.ts`
 
 - [ ] **Step 1: Import the new handler type through dynamic import in the existing test file**
@@ -160,6 +161,7 @@ Expected: FAIL because `createSearchA5sqlAssetsHandler` is not exported yet.
 ### Task 2: Add MCP Schema and Handler
 
 **Files:**
+
 - Modify: `packages/cli/src/mcp/tool-schemas.ts`
 - Modify: `packages/cli/src/mcp/tool-handlers.ts`
 
@@ -299,6 +301,7 @@ Expected: PASS for handler tests. If TypeScript reports a `kinds` type mismatch,
 ### Task 3: Register the MCP Tool
 
 **Files:**
+
 - Modify: `packages/cli/src/mcp/server.ts`
 
 - [ ] **Step 1: Import the handler**
@@ -322,16 +325,16 @@ Add `searchA5sqlAssetsInputSchema` to the existing schema import list:
 Add this block after `read_a5sql_file` registration and before `parse_a5sql_asset` registration:
 
 ```ts
-  server.registerTool(
-    "search_a5sql_assets",
-    {
-      title: "Search A5:SQL assets",
-      description:
-        "A5:SQL 関連 asset を root 配下から検索し、parse_a5sql_asset に渡せる assetId と抜粋を返します。DB には接続しません。",
-      inputSchema: searchA5sqlAssetsInputSchema,
-    },
-    createSearchA5sqlAssetsHandler(),
-  );
+server.registerTool(
+  "search_a5sql_assets",
+  {
+    title: "Search A5:SQL assets",
+    description:
+      "A5:SQL 関連 asset を root 配下から検索し、parse_a5sql_asset に渡せる assetId と抜粋を返します。DB には接続しません。",
+    inputSchema: searchA5sqlAssetsInputSchema,
+  },
+  createSearchA5sqlAssetsHandler(),
+);
 ```
 
 - [ ] **Step 4: Run typecheck**
@@ -347,6 +350,7 @@ Expected: PASS.
 ### Task 4: Update README and AGENTS
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `AGENTS.md`
 
@@ -408,6 +412,7 @@ Expected: the diff only documents the new public `search_a5sql_assets` tool and 
 ### Task 5: Full Verification and Commit
 
 **Files:**
+
 - Verify all changed files.
 
 - [ ] **Step 1: Run focused CLI tests**
