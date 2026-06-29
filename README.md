@@ -174,6 +174,7 @@ A5:SQL Mk-2 が出力するファイル形式を、ファイルシステムや M
 - `.a5er` は `packages/parser` で ER 図として解析します。
 - `.sql` は statement 単位で解析します。
 - テキストファイルは UTF-8、Shift_JIS、UTF-16LE の候補から読み取ります。
+- asset ID 指定の解析では `packages/core` の安全な asset 読み取りとマスク処理を使います。
 - MCP mode では stdout をプロトコル用に使うため、診断ログは stderr に出します。
 
 ### 依存方向
@@ -184,6 +185,8 @@ A5:SQL Mk-2 が出力するファイル形式を、ファイルシステムや M
 packages/parser
   ↑
 packages/core
+  ↑
+packages/cli
 
 packages/parser
   ↑
@@ -259,6 +262,7 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - `describe_a5sql_file`: 起動時に指定されたファイルのパス、種別、サイズ、更新日時を返します。
 - `parse_a5sql_file`: 起動時に指定された `.a5er` / `.sql` ファイルを AI 向けの構造に変換します。デフォルトは `summary` で件数と代表要素だけを返します。`mode: "full"` でも `maxTables` / `maxRelationships` / `maxColumnsPerTable` による上限つきで返します。
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返します。`offsetChars` による文字位置指定、または `startLine` / `maxLines` による行範囲指定ができます。
+- `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換します。任意の `roots` で探索対象を絞れます。DB には接続しません。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返します。`offset` / `limit` によるページングに対応し、デフォルトは 100 件です。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返します。
 - `explain_a5sql_table`: `.a5er` ファイル内の特定テーブルを、役割・主キー・関連テーブル・注意点つきで要約します。
@@ -287,7 +291,7 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 
 ## 環境変数
 
-現時点の CLI / MCP サーバーは、起動時に指定した単一ファイルを読み取ります。設定ディレクトリ探索用の環境変数はまだ公開 API として提供していません。
+基本の CLI / MCP サーバーは、起動時に指定した単一ファイルを読み取ります。`parse_a5sql_asset` では `roots` または `A5SQL_MCP_ROOTS` を使って、指定 root 配下の asset ID を解析対象にできます。設定ディレクトリ探索そのものを返す tool はまだ公開 API として提供していません。
 
 ## セキュリティ方針
 

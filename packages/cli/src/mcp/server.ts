@@ -18,6 +18,7 @@ import {
   createGenerateSqlSelectHandler,
   createListA5sqlRelationshipsHandler,
   createListA5sqlTablesHandler,
+  createParseA5sqlAssetHandler,
   createParseA5sqlFileHandler,
   createReadA5sqlFileHandler,
   createReviewA5sqlSchemaHandler,
@@ -37,6 +38,7 @@ import {
   generateSqlSelectInputSchema,
   listA5sqlRelationshipsInputSchema,
   listA5sqlTablesInputSchema,
+  parseA5sqlAssetInputSchema,
   parseA5sqlFileInputSchema,
   readA5sqlFileInputSchema,
   reviewA5sqlSchemaInputSchema,
@@ -91,6 +93,17 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
       inputSchema: readA5sqlFileInputSchema,
     },
     createReadA5sqlFileHandler(initialFile),
+  );
+
+  server.registerTool(
+    "parse_a5sql_asset",
+    {
+      title: "Parse A5:SQL asset by asset ID",
+      description:
+        "A5:SQL 関連 asset を assetId で指定し、.a5er または .sql を AI が扱いやすい JSON に変換します。DB には接続しません。",
+      inputSchema: parseA5sqlAssetInputSchema,
+    },
+    createParseA5sqlAssetHandler(),
   );
 
   if (initialFile.kind === "a5er") {

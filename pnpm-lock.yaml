@@ -53,6 +53,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
+      '@takuyaw-w/a5sql-mcp-core':
+        specifier: workspace:*
+        version: link:../core
       '@takuyaw-w/a5sql-mcp-parser':
         specifier: workspace:*
         version: link:../parser

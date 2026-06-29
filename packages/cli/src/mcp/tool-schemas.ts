@@ -70,6 +70,52 @@ export const readA5sqlFileInputSchema = {
     .describe("startLine 指定時に返す最大行数。省略時は maxChars の範囲で返します。"),
 };
 
+export const parseA5sqlAssetInputSchema = {
+  assetId: z.string().min(1).describe("search_a5sql_assets などで得た asset ID。"),
+  roots: z
+    .array(z.string().min(1))
+    .max(20)
+    .optional()
+    .describe(
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+    ),
+  maxBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(2_000_000)
+    .optional()
+    .describe("asset 読み取りの最大 byte 数。省略時は 1MB。"),
+  maxTables: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(".a5er で返すテーブルの最大件数。省略時は 100。"),
+  maxRelationships: z
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe(".a5er で返すリレーションの最大件数。省略時は 200。"),
+  maxColumnsPerTable: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(".a5er の各テーブルで返すカラムの最大件数。省略時は 100。"),
+  maxStatements: z
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe(".sql で返す statement の最大件数。省略時は 100。"),
+};
+
 export const listA5sqlTablesInputSchema = {
   offset: z.number().int().min(0).optional().describe("返却開始位置。省略時は 0。"),
   limit: z.number().int().min(1).max(500).optional().describe("返す最大件数。省略時は 100。"),

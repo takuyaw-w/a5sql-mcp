@@ -27,6 +27,7 @@
 - `describe_a5sql_file`: 起動時に指定されたファイルのパス、種別、サイズ、更新日時を返す。
 - `parse_a5sql_file`: 起動時に指定された `.a5er` / `.sql` ファイルを AI 向けの構造に変換する。デフォルトは summary。`mode: "full"` でも `maxTables` / `maxRelationships` / `maxColumnsPerTable` による上限つきで返す。
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返す。`offsetChars`、または `startLine` / `maxLines` で読み取り範囲を絞れる。
+- `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換する。任意の `roots` で探索対象を絞れる。DB には接続しない。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返す。`offset` / `limit` によるページングに対応し、デフォルトは 100 件。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返す。
 - `explain_a5sql_table`: `.a5er` ファイル内の特定テーブルを、役割・主キー・関連テーブル・注意点つきで要約する。

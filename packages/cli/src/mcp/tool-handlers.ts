@@ -1,5 +1,7 @@
 import { stat } from "node:fs/promises";
 
+import { parseA5sqlAsset, type ParsedAssetResult } from "@takuyaw-w/a5sql-mcp-core";
+
 import { readTextFileWithMetadata, type CliResult } from "../index.js";
 import {
   compareA5erWithLiveSchema,
@@ -27,6 +29,10 @@ import {
 import type { JsonObject, ParsedFileLoader } from "./types.js";
 
 const DEFAULT_FILE_READ_MAX_CHARS = 100_000;
+const DEFAULT_ASSET_MAX_TABLES = 100;
+const DEFAULT_ASSET_MAX_RELATIONSHIPS = 200;
+const DEFAULT_ASSET_MAX_COLUMNS_PER_TABLE = 100;
+const DEFAULT_ASSET_MAX_STATEMENTS = 100;
 
 export function createDescribeA5sqlFileHandler(getParsedFile: ParsedFileLoader) {
   return async () => {
@@ -93,6 +99,47 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
         offsetChars,
         startLine,
         maxLines,
+      }),
+    );
+  };
+}
+
+export function createParseA5sqlAssetHandler() {
+  return async ({
+    roots,
+    assetId,
+    maxBytes,
+    maxTables,
+    maxRelationships,
+    maxColumnsPerTable,
+    maxStatements,
+  }: {
+    roots?: string[];
+    assetId: string;
+    maxBytes?: number;
+    maxTables?: number;
+    maxRelationships?: number;
+    maxColumnsPerTable?: number;
+    maxStatements?: number;
+  }) => {
+    const parsed = await parseA5sqlAsset({ roots, assetId, maxBytes });
+    if (!parsed) {
+      return jsonResult({
+        found: false,
+        assetId,
+        code: "asset_not_found",
+        message: "指定された assetId に一致する A5:SQL asset が見つかりません。",
+        nextAction:
+          "同じ roots で search_a5sql_assets を実行し、返された assetId を指定してください。",
+      });
+    }
+
+    return jsonResult(
+      formatParsedAsset(parsed, {
+        maxTables,
+        maxRelationships,
+        maxColumnsPerTable,
+        maxStatements,
       }),
     );
   };
@@ -500,4 +547,63 @@ function jsonResult<T extends JsonObject>(output: T) {
     ],
     structuredContent: output,
   };
+}
+
+function formatParsedAsset(
+  result: ParsedAssetResult,
+  options: {
+    maxTables?: number;
+    maxRelationships?: number;
+    maxColumnsPerTable?: number;
+    maxStatements?: number;
+  },
+): JsonObject {
+  const output: JsonObject = {
+    found: true,
+    asset: result.asset,
+    parser: result.parser,
+    summary: result.summary,
+    warnings: result.warnings,
+  };
+
+  if (result.manager) {
+    output.manager = result.manager;
+  }
+
+  if (result.tables) {
+    const tableLimit = options.maxTables ?? DEFAULT_ASSET_MAX_TABLES;
+    const columnLimit = options.maxColumnsPerTable ?? DEFAULT_ASSET_MAX_COLUMNS_PER_TABLE;
+    const returnedTables = result.tables.slice(0, tableLimit).map((table) => ({
+      ...table,
+      columns: table.columns.slice(0, columnLimit),
+      totalColumnCount: table.columns.length,
+      returnedColumnCount: Math.min(table.columns.length, columnLimit),
+      columnsTruncated: table.columns.length > columnLimit,
+    }));
+    output.tables = returnedTables;
+    output.totalTableCount = result.tables.length;
+    output.returnedTableCount = returnedTables.length;
+    output.tablesTruncated = result.tables.length > returnedTables.length;
+    output.columnsTruncated = returnedTables.some((table) => table.columnsTruncated);
+  }
+
+  if (result.relationships) {
+    const relationshipLimit = options.maxRelationships ?? DEFAULT_ASSET_MAX_RELATIONSHIPS;
+    const relationships = result.relationships.slice(0, relationshipLimit);
+    output.relationships = relationships;
+    output.totalRelationshipCount = result.relationships.length;
+    output.returnedRelationshipCount = relationships.length;
+    output.relationshipsTruncated = result.relationships.length > relationships.length;
+  }
+
+  if (result.statements) {
+    const statementLimit = options.maxStatements ?? DEFAULT_ASSET_MAX_STATEMENTS;
+    const statements = result.statements.slice(0, statementLimit);
+    output.statements = statements;
+    output.totalStatementCount = result.statements.length;
+    output.returnedStatementCount = statements.length;
+    output.statementsTruncated = result.statements.length > statements.length;
+  }
+
+  return output;
 }

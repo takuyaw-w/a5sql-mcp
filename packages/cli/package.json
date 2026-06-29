@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
+    "@takuyaw-w/a5sql-mcp-core": "workspace:*",
     "@takuyaw-w/a5sql-mcp-parser": "workspace:*",
     "zod": "catalog:"
   },
