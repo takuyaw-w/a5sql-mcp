@@ -83,7 +83,16 @@ export const detectA5sqlLocationsInputSchema = {
 };
 
 export const readA5sqlAssetInputSchema = {
-  assetId: z.string().min(1).describe("search_a5sql_assets などで得た asset ID。"),
+  assetId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("search_a5sql_assets などで得た asset ID。path とは同時に指定しません。"),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("明示的に読み取る asset path。roots 指定時はその root 配下だけを読み取ります。"),
   roots: z
     .array(z.string().min(1))
     .max(20)
@@ -98,6 +107,19 @@ export const readA5sqlAssetInputSchema = {
     .max(2_000_000)
     .optional()
     .describe("asset 読み取りの最大 byte 数。省略時は 128KB。"),
+  maxChars: z
+    .number()
+    .int()
+    .min(1)
+    .max(500_000)
+    .optional()
+    .describe("返す最大文字数。省略時は読み取った本文全体。"),
+  offsetChars: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe("返す本文の開始位置を文字数で指定します。省略時は 0。"),
 };
 
 export const listA5sqlConnectionsInputSchema = {

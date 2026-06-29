@@ -1,4 +1,4 @@
-import { opendir, stat } from "node:fs/promises";
+import { opendir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { stableAssetId } from "./hash.js";
@@ -120,6 +120,21 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
 
 export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAssetResult | null> {
   const maxBytes = clamp(options.maxBytes ?? DEFAULT_READ_BYTES, 1, 2 * 1024 * 1024);
+  if (options.path) {
+    const filePath = path.resolve(options.path);
+    if (options.roots && options.roots.length > 0) {
+      const withinRoots = await isPathWithinRoots(filePath, options.roots);
+      if (!withinRoots) {
+        return null;
+      }
+    }
+    return readAssetPath(filePath, stableAssetId(filePath), maxBytes);
+  }
+
+  if (!options.assetId) {
+    return null;
+  }
+
   const roots = await resolveReadableRoots(options.roots);
 
   for (const root of roots) {
@@ -130,40 +145,7 @@ export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAss
       if (stableAssetId(filePath) !== options.assetId) {
         continue;
       }
-      const fileStat = await safeStat(filePath);
-      if (!fileStat?.isFile()) {
-        return null;
-      }
-      const asset: AssetRecord = {
-        id: options.assetId,
-        kind: classifyAsset(filePath),
-        path: filePath,
-        fileName: path.basename(filePath),
-        size: fileStat.size,
-        modifiedAt: fileStat.mtime.toISOString(),
-        matched: true,
-      };
-
-      if (!isTextSearchable(filePath)) {
-        return {
-          asset,
-          content: "",
-          encoding: "binary_or_unsupported",
-          truncated: false,
-          bytesRead: 0,
-          warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"],
-        };
-      }
-
-      const decoded = await readTextFile(filePath, maxBytes);
-      return {
-        asset,
-        content: maskSensitiveText(decoded.text),
-        encoding: decoded.encoding,
-        truncated: decoded.truncated,
-        bytesRead: decoded.bytesRead,
-        warnings: decoded.encoding === "binary" ? ["binary_file_not_returned"] : [],
-      };
+      return readAssetPath(filePath, options.assetId, maxBytes);
     }
   }
 
@@ -236,6 +218,74 @@ async function* walkFiles(
 async function safeStat(filePath: string) {
   try {
     return await stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+async function readAssetPath(
+  filePath: string,
+  assetId: string,
+  maxBytes: number,
+): Promise<ReadAssetResult | null> {
+  const fileStat = await safeStat(filePath);
+  if (!fileStat?.isFile()) {
+    return null;
+  }
+  const asset: AssetRecord = {
+    id: assetId,
+    kind: classifyAsset(filePath),
+    path: filePath,
+    fileName: path.basename(filePath),
+    size: fileStat.size,
+    modifiedAt: fileStat.mtime.toISOString(),
+    matched: true,
+  };
+
+  if (!isTextSearchable(filePath)) {
+    return {
+      asset,
+      content: "",
+      encoding: "binary_or_unsupported",
+      truncated: false,
+      bytesRead: 0,
+      warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"],
+    };
+  }
+
+  const decoded = await readTextFile(filePath, maxBytes);
+  return {
+    asset,
+    content: maskSensitiveText(decoded.text),
+    encoding: decoded.encoding,
+    truncated: decoded.truncated,
+    bytesRead: decoded.bytesRead,
+    warnings: decoded.encoding === "binary" ? ["binary_file_not_returned"] : [],
+  };
+}
+
+async function isPathWithinRoots(filePath: string, roots: string[]): Promise<boolean> {
+  const resolvedFilePath = await safeRealpath(filePath);
+  if (!resolvedFilePath) {
+    return false;
+  }
+
+  for (const root of roots) {
+    const resolvedRoot = await safeRealpath(path.resolve(root));
+    if (!resolvedRoot) {
+      continue;
+    }
+    const relativePath = path.relative(resolvedRoot, resolvedFilePath);
+    if (relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function safeRealpath(filePath: string): Promise<string | null> {
+  try {
+    return await realpath(filePath);
   } catch {
     return null;
   }

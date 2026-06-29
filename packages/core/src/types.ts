@@ -42,7 +42,8 @@ export type SearchAssetsOptions = {
 
 export type ReadAssetOptions = {
   roots?: string[];
-  assetId: string;
+  assetId?: string;
+  path?: string;
   maxBytes?: number;
 };
 

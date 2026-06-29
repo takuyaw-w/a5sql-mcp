@@ -134,17 +134,34 @@ export function createReadA5sqlAssetHandler() {
   return async ({
     roots,
     assetId,
+    path,
     maxBytes,
+    maxChars,
+    offsetChars,
   }: {
     roots?: string[];
-    assetId: string;
+    assetId?: string;
+    path?: string;
     maxBytes?: number;
+    maxChars?: number;
+    offsetChars?: number;
   }) => {
-    const result = await readA5sqlAsset({ roots, assetId, maxBytes });
+    if ((assetId ? 1 : 0) + (path ? 1 : 0) !== 1) {
+      return jsonResult({
+        found: false,
+        code: "invalid_asset_selector",
+        message: "assetId または path のどちらか一方だけを指定してください。",
+        warnings: [],
+        nextAction:
+          "search_a5sql_assets で得た assetId、または roots 内の明示的な path を指定してください。",
+      });
+    }
+
+    const result = await readA5sqlAsset({ roots, assetId, path, maxBytes });
     if (!result) {
       return jsonResult({
         found: false,
-        assetId,
+        assetId: assetId ?? null,
         code: "asset_not_found",
         message: "指定された assetId に一致する A5:SQL asset が見つかりません。",
         warnings: [],
@@ -153,6 +170,11 @@ export function createReadA5sqlAssetHandler() {
       });
     }
 
+    const sliced = sliceTextByChars(result.content, {
+      offsetChars,
+      maxChars,
+      alreadyTruncated: result.truncated,
+    });
     return jsonResult({
       found: true,
       asset: {
@@ -163,10 +185,14 @@ export function createReadA5sqlAssetHandler() {
         size: result.asset.size,
         modifiedAt: result.asset.modifiedAt,
       },
-      content: result.content,
+      content: sliced.content,
       encoding: normalizeEncodingName(result.encoding),
-      truncated: result.truncated,
+      truncated: sliced.truncated,
       bytesRead: result.bytesRead,
+      offsetChars: sliced.offsetChars,
+      maxChars: sliced.maxChars,
+      returnedChars: sliced.returnedChars,
+      totalChars: sliced.totalChars,
       warnings: result.warnings,
       nextAction:
         result.asset.kind === "er" || result.asset.kind === "sql"
@@ -187,16 +213,19 @@ export function createListA5sqlConnectionsHandler() {
     revealNonSecret?: boolean;
   }) => {
     const effectiveLimit = limit ?? 50;
+    const requestedLimit = effectiveLimit < 200 ? effectiveLimit + 1 : effectiveLimit;
     const connections = await listA5sqlConnections({
       roots,
-      limit,
+      limit: requestedLimit,
       revealNonSecret,
     });
+    const truncated = connections.length > effectiveLimit;
+    const publicConnections = connections.slice(0, effectiveLimit).map(toPublicConnectionCandidate);
     return jsonResult({
-      connections,
-      totalConnectionCount: connections.length,
-      returnedConnectionCount: connections.length,
-      truncated: connections.length >= effectiveLimit,
+      connections: publicConnections,
+      totalConnectionCount: publicConnections.length,
+      returnedConnectionCount: publicConnections.length,
+      truncated,
       warnings: revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
       nextAction:
         "接続候補は存在確認用です。パスワード、トークン、接続文字列、DB への接続実行は返しません。",
@@ -206,6 +235,41 @@ export function createListA5sqlConnectionsHandler() {
 
 function normalizeEncodingName(encoding: string): string {
   return encoding === "utf-8" ? "utf8" : encoding;
+}
+
+function sliceTextByChars(
+  text: string,
+  options: { offsetChars?: number; maxChars?: number; alreadyTruncated: boolean },
+): {
+  content: string;
+  offsetChars: number;
+  maxChars: number;
+  returnedChars: number;
+  totalChars: number;
+  truncated: boolean;
+} {
+  const totalChars = text.length;
+  const offsetChars = Math.max(0, options.offsetChars ?? 0);
+  const maxChars = Math.max(1, (options.maxChars ?? totalChars) || 1);
+  const start = Math.min(offsetChars, totalChars);
+  const end = Math.min(start + maxChars, totalChars);
+  const content = text.slice(start, end);
+
+  return {
+    content,
+    offsetChars,
+    maxChars,
+    returnedChars: content.length,
+    totalChars,
+    truncated: options.alreadyTruncated || start > 0 || end < totalChars,
+  };
+}
+
+function toPublicConnectionCandidate<T extends { sourcePath?: string }>(
+  connection: T,
+): Omit<T, "sourcePath"> {
+  const { sourcePath: _sourcePath, ...publicConnection } = connection;
+  return publicConnection;
 }
 
 export function createSearchA5sqlAssetsHandler() {

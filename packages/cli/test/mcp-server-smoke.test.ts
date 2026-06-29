@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -7,9 +7,32 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 
-import { createA5sqlMcpServer } from "../src/mcp/server.js";
+import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
 
 describe("A5:SQL MCP server smoke", () => {
+  it("reports 0.4.0 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.4.0");
+
+    const packageJsonPaths = [
+      new URL("../../../package.json", import.meta.url),
+      new URL("../../parser/package.json", import.meta.url),
+      new URL("../../core/package.json", import.meta.url),
+      new URL("../package.json", import.meta.url),
+    ];
+    const packageJsons = await Promise.all(
+      packageJsonPaths.map(async (packageJsonPath) =>
+        JSON.parse(await readFile(packageJsonPath, "utf8")),
+      ),
+    );
+
+    expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
+      "0.4.0",
+      "0.4.0",
+      "0.4.0",
+      "0.4.0",
+    ]);
+  });
+
   it("lists 0.4 tools and can call detect_a5sql_locations", async () => {
     const root = path.join(os.tmpdir(), `a5sql-mcp-smoke-${randomUUID()}`);
     const filePath = path.join(root, "schema.sql");

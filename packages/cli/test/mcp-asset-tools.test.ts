@@ -97,6 +97,112 @@ describe("A5:SQL asset MCP tools", () => {
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-api-key");
   });
 
+  it("reads an asset by explicit path with character offsets and masked content", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "slice.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(
+      sqlPath,
+      [
+        "prefix host=localhost",
+        "DATABASE_URL=postgres://alice:raw-password@localhost/app",
+        "suffix",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      path: sqlPath,
+      maxChars: 14,
+      offsetChars: 7,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: true,
+      asset: expect.objectContaining({
+        kind: "sql",
+        fileName: "slice.sql",
+      }),
+      content: "host=localhost",
+      offsetChars: 7,
+      maxChars: 14,
+      returnedChars: 14,
+      encoding: "utf8",
+      warnings: [],
+    });
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-password");
+    expect(JSON.stringify(result.structuredContent)).not.toContain(
+      "postgres://alice:raw-password@localhost/app",
+    );
+  });
+
+  it("rejects ambiguous or missing read asset selectors", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "ambiguous.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(sqlPath, "select 1;", "utf8");
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const ambiguous = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      assetId: stableAssetId(sqlPath),
+      path: sqlPath,
+    });
+    const missing = await createReadA5sqlAssetHandler!()({ roots: [root] });
+
+    expect(ambiguous.structuredContent).toMatchObject({
+      found: false,
+      code: "invalid_asset_selector",
+    });
+    expect(missing.structuredContent).toMatchObject({
+      found: false,
+      code: "invalid_asset_selector",
+    });
+  });
+
+  it("does not read explicit paths outside provided roots", async () => {
+    const root = await makeTempDir();
+    const outsideRoot = await makeTempDir();
+    const sqlPath = path.join(outsideRoot, "outside.sql");
+    await writeFile(sqlPath, "select * from secrets;", "utf8");
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      path: sqlPath,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: false,
+      code: "asset_not_found",
+    });
+    expect(JSON.stringify(result.structuredContent)).not.toContain("select * from secrets");
+  });
+
+  it("returns no content and a warning for unsupported binary asset reads", async () => {
+    const root = await makeTempDir();
+    const sqlitePath = path.join(root, "cache.sqlite");
+    await writeFile(sqlitePath, Buffer.from([0x00, 0x01, 0x02, 0x03]));
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      path: sqlitePath,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: true,
+      content: "",
+      encoding: "binary_or_unsupported",
+      truncated: false,
+      bytesRead: 0,
+      returnedChars: 0,
+      warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"],
+    });
+  });
+
   it("lists connection candidates with non-secret fields masked by default", async () => {
     const root = await makeTempDir();
     const configPath = path.join(root, "connections.ini");
@@ -138,8 +244,50 @@ describe("A5:SQL asset MCP tools", () => {
         warnings: ["non_secret_connection_fields_masked_by_default"],
       }),
     ]);
+    expect(result.structuredContent.connections[0]).not.toHaveProperty("sourcePath");
+    expect(JSON.stringify(result.structuredContent)).not.toContain(root);
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-password");
     expect(JSON.stringify(result.structuredContent)).not.toContain("developer");
+  });
+
+  it("reveals only non-secret connection fields when requested", async () => {
+    const root = await makeTempDir();
+    const configPath = path.join(root, "connections.ini");
+    await writeFile(
+      configPath,
+      [
+        "Name=Local PostgreSQL",
+        "Host=localhost",
+        "Database=app",
+        "User=alice",
+        "Password=raw-password",
+        "DATABASE_URL=postgres://alice:raw-password@localhost/app",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { createListA5sqlConnectionsHandler } = await loadAssetHandlers();
+    const result = await createListA5sqlConnectionsHandler!()({
+      roots: [root],
+      limit: 10,
+      revealNonSecret: true,
+    });
+    const serialized = JSON.stringify(result.structuredContent);
+
+    expect(result.structuredContent.connections).toEqual([
+      expect.objectContaining({
+        sourceName: "connections.ini",
+        fields: expect.objectContaining({
+          host: { value: "localhost", masked: false },
+          database: { value: "app", masked: false },
+          user: { value: "alice", masked: false },
+        }),
+      }),
+    ]);
+    expect(result.structuredContent.connections[0]).not.toHaveProperty("sourcePath");
+    expect(serialized).not.toContain(root);
+    expect(serialized).not.toContain("raw-password");
+    expect(serialized).not.toContain("postgres://alice:raw-password@localhost/app");
   });
 
   it("parses a discovered SQL asset by asset ID", async () => {
@@ -289,8 +437,11 @@ async function loadAssetHandlers() {
     }) => Promise<{ structuredContent: Record<string, unknown> }>;
     createReadA5sqlAssetHandler?: () => (input: {
       roots?: string[];
-      assetId: string;
+      assetId?: string;
+      path?: string;
       maxBytes?: number;
+      maxChars?: number;
+      offsetChars?: number;
     }) => Promise<{ structuredContent: Record<string, unknown> }>;
     createListA5sqlConnectionsHandler?: () => (input: {
       roots?: string[];

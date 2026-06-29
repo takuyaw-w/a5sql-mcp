@@ -54,6 +54,38 @@ describe("maskSensitiveText", () => {
     expect(masked).toContain("after");
     expect(masked).not.toContain("raw-private-key-material");
   });
+
+  it("masks keyed connection URLs and connection strings", () => {
+    const input = [
+      "DATABASE_URL=postgres://alice:raw-password@localhost/app",
+      "CONNECTION_STRING=Server=localhost;User ID=alice;Password=raw-password;Database=app",
+      "DSN=mysql://bob:dsn-secret@localhost/app",
+      "host=localhost",
+    ].join("\n");
+
+    const masked = maskSensitiveText(input);
+
+    expect(masked).toContain("DATABASE_URL=***");
+    expect(masked).toContain("CONNECTION_STRING=***");
+    expect(masked).toContain("DSN=***");
+    expect(masked).toContain("host=localhost");
+    expect(masked).not.toContain("raw-password");
+    expect(masked).not.toContain("dsn-secret");
+    expect(masked).not.toContain("postgres://alice:raw-password@localhost/app");
+    expect(masked).not.toContain(
+      "Server=localhost;User ID=alice;Password=raw-password;Database=app",
+    );
+    expect(masked).not.toContain("mysql://bob:dsn-secret@localhost/app");
+  });
+
+  it("masks inline URL userinfo passwords without masking non-secret values", () => {
+    const masked = maskSensitiveText("host=localhost\npostgres://alice:url-secret@localhost/app");
+
+    expect(masked).toContain("host=localhost");
+    expect(masked).toContain("postgres://***@localhost/app");
+    expect(masked).not.toContain("url-secret");
+    expect(masked).not.toContain("alice:url-secret");
+  });
 });
 
 describe("maskValue", () => {

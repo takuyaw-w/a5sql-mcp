@@ -58,6 +58,8 @@ export type McpServerOptions = {
   fileArg: string;
 };
 
+export const A5SQL_MCP_SERVER_VERSION = "0.4.0";
+
 export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void> {
   const server = await createA5sqlMcpServer({ fileArg });
   const transport = new StdioServerTransport();
@@ -86,7 +88,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
   });
   const server = new McpServer({
     name: "a5sql-mcp",
-    version: "0.3.0",
+    version: A5SQL_MCP_SERVER_VERSION,
   });
 
   server.registerTool(
