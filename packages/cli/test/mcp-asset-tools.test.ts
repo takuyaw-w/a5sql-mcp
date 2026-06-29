@@ -34,6 +34,114 @@ describe("A5:SQL asset MCP tools", () => {
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-api-key");
   });
 
+  it("detects A5:SQL locations from explicit roots", async () => {
+    const root = await makeTempDir();
+
+    const { createDetectA5sqlLocationsHandler } = await loadAssetHandlers();
+    expect(createDetectA5sqlLocationsHandler).toBeTypeOf("function");
+
+    const result = await createDetectA5sqlLocationsHandler!()({
+      roots: [root],
+      includeDefaults: false,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      totalCandidateCount: 1,
+      returnedCandidateCount: 1,
+      warnings: [],
+    });
+    expect(result.structuredContent.candidates).toEqual([
+      expect.objectContaining({
+        path: root,
+        source: "extra",
+        exists: true,
+        readable: true,
+      }),
+    ]);
+  });
+
+  it("reads a discovered asset with masked content", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "credentials.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(
+      sqlPath,
+      "select * from users where password='raw-password';\napi_key=raw-api-key",
+      "utf8",
+    );
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    expect(createReadA5sqlAssetHandler).toBeTypeOf("function");
+
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      assetId: stableAssetId(sqlPath),
+      maxBytes: 1024,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: true,
+      asset: expect.objectContaining({
+        assetId: stableAssetId(sqlPath),
+        kind: "sql",
+        fileName: "credentials.sql",
+        path: sqlPath,
+      }),
+      encoding: "utf8",
+      truncated: false,
+      warnings: [],
+    });
+    expect(result.structuredContent.content).toContain("password='***'");
+    expect(result.structuredContent.content).toContain("api_key=***");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-password");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-api-key");
+  });
+
+  it("lists connection candidates with non-secret fields masked by default", async () => {
+    const root = await makeTempDir();
+    const configPath = path.join(root, "connections.ini");
+    await writeFile(
+      configPath,
+      [
+        "Name=Local PostgreSQL",
+        "Host=localhost",
+        "Port=5432",
+        "Database=app",
+        "User=developer",
+        "Password=raw-password",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { createListA5sqlConnectionsHandler } = await loadAssetHandlers();
+    expect(createListA5sqlConnectionsHandler).toBeTypeOf("function");
+
+    const result = await createListA5sqlConnectionsHandler!()({
+      roots: [root],
+      limit: 10,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      totalConnectionCount: 1,
+      returnedConnectionCount: 1,
+      truncated: false,
+    });
+    expect(result.structuredContent.connections).toEqual([
+      expect.objectContaining({
+        sourceName: "connections.ini",
+        hasPassword: true,
+        fields: expect.objectContaining({
+          host: { value: "l***t", masked: true },
+          database: { value: "a***p", masked: true },
+          user: { value: "d***r", masked: true },
+        }),
+        warnings: ["non_secret_connection_fields_masked_by_default"],
+      }),
+    ]);
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-password");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("developer");
+  });
+
   it("parses a discovered SQL asset by asset ID", async () => {
     const root = await makeTempDir();
     const sqlPath = path.join(root, "queries", "find-users.sql");
@@ -175,6 +283,20 @@ function stableAssetId(filePath: string): string {
 async function loadAssetHandlers() {
   const handlers = await import("../src/mcp/tool-handlers.js");
   return handlers as unknown as {
+    createDetectA5sqlLocationsHandler?: () => (input: {
+      roots?: string[];
+      includeDefaults?: boolean;
+    }) => Promise<{ structuredContent: Record<string, unknown> }>;
+    createReadA5sqlAssetHandler?: () => (input: {
+      roots?: string[];
+      assetId: string;
+      maxBytes?: number;
+    }) => Promise<{ structuredContent: Record<string, unknown> }>;
+    createListA5sqlConnectionsHandler?: () => (input: {
+      roots?: string[];
+      limit?: number;
+      revealNonSecret?: boolean;
+    }) => Promise<{ structuredContent: Record<string, unknown> }>;
     createSearchA5sqlAssetsHandler?: () => (input: {
       roots?: string[];
       query?: string;

@@ -70,6 +70,51 @@ export const readA5sqlFileInputSchema = {
     .describe("startLine 指定時に返す最大行数。省略時は maxChars の範囲で返します。"),
 };
 
+export const detectA5sqlLocationsInputSchema = {
+  roots: z
+    .array(z.string().min(1))
+    .max(20)
+    .optional()
+    .describe("追加で確認したい A5:SQL 設定 root 候補。"),
+  includeDefaults: z
+    .boolean()
+    .optional()
+    .describe("false の場合、OS や home/Wine 由来の既定候補を含めません。省略時は true。"),
+};
+
+export const readA5sqlAssetInputSchema = {
+  assetId: z.string().min(1).describe("search_a5sql_assets などで得た asset ID。"),
+  roots: z
+    .array(z.string().min(1))
+    .max(20)
+    .optional()
+    .describe(
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+    ),
+  maxBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(2_000_000)
+    .optional()
+    .describe("asset 読み取りの最大 byte 数。省略時は 128KB。"),
+};
+
+export const listA5sqlConnectionsInputSchema = {
+  roots: z
+    .array(z.string().min(1))
+    .max(20)
+    .optional()
+    .describe(
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+    ),
+  limit: z.number().int().min(1).max(200).optional().describe("返す最大件数。省略時は 50。"),
+  revealNonSecret: z
+    .boolean()
+    .optional()
+    .describe("true の場合、host/database/user など非秘密項目を返します。秘密値は常に返しません。"),
+};
+
 export const searchA5sqlAssetsInputSchema = {
   query: z
     .string()

@@ -1,8 +1,11 @@
 import { stat } from "node:fs/promises";
 
 import {
+  detectA5sqlLocations,
+  listA5sqlConnections,
   maskSensitiveText,
   parseA5sqlAsset,
+  readA5sqlAsset,
   searchA5sqlAssets,
   type ParsedAssetResult,
 } from "@takuyaw-w/a5sql-mcp-core";
@@ -38,6 +41,9 @@ const DEFAULT_ASSET_MAX_TABLES = 100;
 const DEFAULT_ASSET_MAX_RELATIONSHIPS = 200;
 const DEFAULT_ASSET_MAX_COLUMNS_PER_TABLE = 100;
 const DEFAULT_ASSET_MAX_STATEMENTS = 100;
+type DetectA5sqlLocationsInput = NonNullable<Parameters<typeof detectA5sqlLocations>[0]> & {
+  includeDefaults?: boolean;
+};
 
 export function createDescribeA5sqlFileHandler(getParsedFile: ParsedFileLoader) {
   return async () => {
@@ -108,6 +114,114 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
       }),
     );
   };
+}
+
+export function createDetectA5sqlLocationsHandler() {
+  return async ({
+    roots,
+    includeDefaults,
+  }: {
+    roots?: string[];
+    includeDefaults?: boolean;
+  }) => {
+    const detectedCandidates = await detectA5sqlLocations({
+      extraRoots: roots,
+      includeDefaults,
+    } as DetectA5sqlLocationsInput);
+    const candidates =
+      includeDefaults === false
+        ? detectedCandidates.filter(
+            (candidate) => candidate.source === "env" || candidate.source === "extra",
+          )
+        : detectedCandidates;
+    return jsonResult({
+      candidates,
+      totalCandidateCount: candidates.length,
+      returnedCandidateCount: candidates.length,
+      warnings: [],
+      nextAction:
+        "readable な path を roots または A5SQL_MCP_ROOTS に指定すると、search_a5sql_assets や list_a5sql_connections の探索対象にできます。",
+    });
+  };
+}
+
+export function createReadA5sqlAssetHandler() {
+  return async ({
+    roots,
+    assetId,
+    maxBytes,
+  }: {
+    roots?: string[];
+    assetId: string;
+    maxBytes?: number;
+  }) => {
+    const result = await readA5sqlAsset({ roots, assetId, maxBytes });
+    if (!result) {
+      return jsonResult({
+        found: false,
+        assetId,
+        code: "asset_not_found",
+        message: "指定された assetId に一致する A5:SQL asset が見つかりません。",
+        warnings: [],
+        nextAction:
+          "同じ roots で search_a5sql_assets を実行し、返された assetId を指定してください。",
+      });
+    }
+
+    return jsonResult({
+      found: true,
+      asset: {
+        assetId: result.asset.id,
+        kind: result.asset.kind,
+        fileName: result.asset.fileName,
+        path: result.asset.path,
+        size: result.asset.size,
+        modifiedAt: result.asset.modifiedAt,
+      },
+      content: result.content,
+      encoding: normalizeEncodingName(result.encoding),
+      truncated: result.truncated,
+      bytesRead: result.bytesRead,
+      warnings: result.warnings,
+      nextAction:
+        result.asset.kind === "er" || result.asset.kind === "sql"
+          ? "parse_a5sql_asset に同じ assetId を渡すと構造化できます。"
+          : "必要な範囲だけ maxBytes を増やして読み取ってください。",
+    });
+  };
+}
+
+export function createListA5sqlConnectionsHandler() {
+  return async ({
+    roots,
+    limit,
+    revealNonSecret,
+  }: {
+    roots?: string[];
+    limit?: number;
+    revealNonSecret?: boolean;
+  }) => {
+    const effectiveLimit = limit ?? 50;
+    const connections = await listA5sqlConnections({
+      roots,
+      limit,
+      revealNonSecret,
+    });
+    return jsonResult({
+      connections,
+      totalConnectionCount: connections.length,
+      returnedConnectionCount: connections.length,
+      truncated: connections.length >= effectiveLimit,
+      warnings:
+        revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
+      nextAction:
+        "接続候補は存在確認用です。パスワード、トークン、接続文字列、DB への接続実行は返しません。",
+    });
+  };
+}
+
+function normalizeEncodingName(encoding: string): string {
+  return encoding === "utf-8" ? "utf8" : encoding;
 }
 
 export function createSearchA5sqlAssetsHandler() {
