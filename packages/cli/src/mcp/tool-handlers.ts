@@ -114,13 +114,7 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
 }
 
 export function createDetectA5sqlLocationsHandler() {
-  return async ({
-    roots,
-    includeDefaults,
-  }: {
-    roots?: string[];
-    includeDefaults?: boolean;
-  }) => {
+  return async ({ roots, includeDefaults }: { roots?: string[]; includeDefaults?: boolean }) => {
     const candidates = await detectA5sqlLocations({
       extraRoots: roots,
       includeDefaults,
@@ -203,8 +197,7 @@ export function createListA5sqlConnectionsHandler() {
       totalConnectionCount: connections.length,
       returnedConnectionCount: connections.length,
       truncated: connections.length >= effectiveLimit,
-      warnings:
-        revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
+      warnings: revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
       nextAction:
         "接続候補は存在確認用です。パスワード、トークン、接続文字列、DB への接続実行は返しません。",
     });
