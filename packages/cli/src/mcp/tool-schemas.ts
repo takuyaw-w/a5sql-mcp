@@ -70,6 +70,53 @@ export const readA5sqlFileInputSchema = {
     .describe("startLine 指定時に返す最大行数。省略時は maxChars の範囲で返します。"),
 };
 
+export const searchA5sqlAssetsInputSchema = {
+  query: z
+    .string()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("任意。ファイル名または検索可能な本文に含まれる語。"),
+  roots: z
+    .array(z.string().min(1))
+    .max(20)
+    .optional()
+    .describe(
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+    ),
+  kinds: z
+    .array(z.enum(["sql", "er", "config", "text", "database", "unknown"]))
+    .max(20)
+    .optional()
+    .describe("任意。探索対象の asset 種別。"),
+  limit: z.number().int().min(1).max(500).optional().describe("返す最大件数。省略時は 50。"),
+  includeHidden: z
+    .boolean()
+    .optional()
+    .describe("true の場合、隠しファイルや隠しディレクトリも探索します。省略時は false。"),
+  maxDepth: z
+    .number()
+    .int()
+    .min(1)
+    .max(32)
+    .optional()
+    .describe("探索するディレクトリ深さの上限。省略時は 8。"),
+  maxFiles: z
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .optional()
+    .describe("探索するファイル数の上限。省略時は 5000。"),
+  maxFileBytes: z
+    .number()
+    .int()
+    .min(1024)
+    .max(10 * 1024 * 1024)
+    .optional()
+    .describe("本文検索する最大 byte 数。省略時は 512KB。"),
+};
+
 export const parseA5sqlAssetInputSchema = {
   assetId: z.string().min(1).describe("search_a5sql_assets などで得た asset ID。"),
   roots: z

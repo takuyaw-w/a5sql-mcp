@@ -27,6 +27,7 @@
 - `describe_a5sql_file`: 起動時に指定されたファイルのパス、種別、サイズ、更新日時を返す。
 - `parse_a5sql_file`: 起動時に指定された `.a5er` / `.sql` ファイルを AI 向けの構造に変換する。デフォルトは summary。`mode: "full"` でも `maxTables` / `maxRelationships` / `maxColumnsPerTable` による上限つきで返す。
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返す。`offsetChars`、または `startLine` / `maxLines` で読み取り範囲を絞れる。
+- `search_a5sql_assets`: `roots` または `A5SQL_MCP_ROOTS` で指定された root 配下から A5:SQL 関連 asset を検索し、`parse_a5sql_asset` に渡せる `assetId` とマスク済み抜粋を返す。DB には接続しない。
 - `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換する。任意の `roots` で探索対象を絞れる。DB には接続しない。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返す。`offset` / `limit` によるページングに対応し、デフォルトは 100 件。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返す。
@@ -51,8 +52,7 @@
 
 - A5:SQL の設定ディレクトリ候補を検出する。
 - 登録済み接続情報の一覧を、秘密情報をマスクして返す。
-- テーブル定義や ER 図メタデータを検索する。
-- 保存済み SQL、履歴、メモを検索する。
+- A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
 - 指定された資産を AI 向けに要約して返す。
 
 実際に接続先 DB へ SQL を実行する機能は、初期スコープには含めません。将来追加する場合も、読み取り専用クエリ、明示的な許可、監査ログ、タイムアウト、件数制限を必須条件にしてください。

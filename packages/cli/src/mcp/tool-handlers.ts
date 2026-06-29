@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import {
   maskSensitiveText,
   parseA5sqlAsset,
+  searchA5sqlAssets,
   type ParsedAssetResult,
 } from "@takuyaw-w/a5sql-mcp-core";
 
@@ -106,6 +107,58 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
         maxLines,
       }),
     );
+  };
+}
+
+export function createSearchA5sqlAssetsHandler() {
+  return async ({
+    roots,
+    query,
+    kinds,
+    limit,
+    includeHidden,
+    maxDepth,
+    maxFiles,
+    maxFileBytes,
+  }: {
+    roots?: string[];
+    query?: string;
+    kinds?: ("sql" | "er" | "config" | "text" | "database" | "unknown")[];
+    limit?: number;
+    includeHidden?: boolean;
+    maxDepth?: number;
+    maxFiles?: number;
+    maxFileBytes?: number;
+  }) => {
+    const effectiveLimit = limit ?? 50;
+    const assets = await searchA5sqlAssets({
+      roots,
+      query,
+      kinds,
+      limit,
+      includeHidden,
+      maxDepth,
+      maxFiles,
+      maxFileBytes,
+    });
+
+    return jsonResult({
+      query: query ?? null,
+      roots: roots ?? null,
+      count: assets.length,
+      truncated: assets.length >= effectiveLimit,
+      nextAction: "parse_a5sql_asset に assetId を渡すと内容を解析できます。",
+      assets: assets.map((asset) => ({
+        assetId: asset.id,
+        kind: asset.kind,
+        fileName: asset.fileName,
+        path: asset.path,
+        size: asset.size,
+        modifiedAt: asset.modifiedAt,
+        snippet: asset.snippet ?? null,
+        warning: asset.warning ?? null,
+      })),
+    });
   };
 }
 

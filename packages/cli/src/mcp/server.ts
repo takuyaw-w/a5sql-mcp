@@ -22,6 +22,7 @@ import {
   createParseA5sqlFileHandler,
   createReadA5sqlFileHandler,
   createReviewA5sqlSchemaHandler,
+  createSearchA5sqlAssetsHandler,
   createSuggestSchemaChangesHandler,
 } from "./tool-handlers.js";
 import {
@@ -42,6 +43,7 @@ import {
   parseA5sqlFileInputSchema,
   readA5sqlFileInputSchema,
   reviewA5sqlSchemaInputSchema,
+  searchA5sqlAssetsInputSchema,
   suggestSchemaChangesInputSchema,
 } from "./tool-schemas.js";
 import type { ParsedFileLoader } from "./types.js";
@@ -93,6 +95,17 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
       inputSchema: readA5sqlFileInputSchema,
     },
     createReadA5sqlFileHandler(initialFile),
+  );
+
+  server.registerTool(
+    "search_a5sql_assets",
+    {
+      title: "Search A5:SQL assets",
+      description:
+        "A5:SQL 関連 asset を root 配下から検索し、parse_a5sql_asset に渡せる assetId と抜粋を返します。DB には接続しません。",
+      inputSchema: searchA5sqlAssetsInputSchema,
+    },
+    createSearchA5sqlAssetsHandler(),
   );
 
   server.registerTool(
