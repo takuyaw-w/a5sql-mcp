@@ -41,9 +41,6 @@ const DEFAULT_ASSET_MAX_TABLES = 100;
 const DEFAULT_ASSET_MAX_RELATIONSHIPS = 200;
 const DEFAULT_ASSET_MAX_COLUMNS_PER_TABLE = 100;
 const DEFAULT_ASSET_MAX_STATEMENTS = 100;
-type DetectA5sqlLocationsInput = NonNullable<Parameters<typeof detectA5sqlLocations>[0]> & {
-  includeDefaults?: boolean;
-};
 
 export function createDescribeA5sqlFileHandler(getParsedFile: ParsedFileLoader) {
   return async () => {
@@ -124,16 +121,10 @@ export function createDetectA5sqlLocationsHandler() {
     roots?: string[];
     includeDefaults?: boolean;
   }) => {
-    const detectedCandidates = await detectA5sqlLocations({
+    const candidates = await detectA5sqlLocations({
       extraRoots: roots,
       includeDefaults,
-    } as DetectA5sqlLocationsInput);
-    const candidates =
-      includeDefaults === false
-        ? detectedCandidates.filter(
-            (candidate) => candidate.source === "env" || candidate.source === "extra",
-          )
-        : detectedCandidates;
+    });
     return jsonResult({
       candidates,
       totalCandidateCount: candidates.length,
