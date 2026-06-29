@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { parseFile, type CliResult } from "../index.js";
 import {
   createCompareA5erWithLiveSchemaHandler,
+  createDetectA5sqlLocationsHandler,
   createDescribeA5sqlFileHandler,
   createDescribeA5sqlTableHandler,
   createExplainA5sqlTableHandler,
@@ -16,10 +17,12 @@ import {
   createGenerateModelFilesHandler,
   createGenerateSchemaMarkdownHandler,
   createGenerateSqlSelectHandler,
+  createListA5sqlConnectionsHandler,
   createListA5sqlRelationshipsHandler,
   createListA5sqlTablesHandler,
   createParseA5sqlAssetHandler,
   createParseA5sqlFileHandler,
+  createReadA5sqlAssetHandler,
   createReadA5sqlFileHandler,
   createReviewA5sqlSchemaHandler,
   createSearchA5sqlAssetsHandler,
@@ -27,6 +30,7 @@ import {
 } from "./tool-handlers.js";
 import {
   compareA5erWithLiveSchemaToolInputSchema,
+  detectA5sqlLocationsInputSchema,
   describeA5sqlFileInputSchema,
   describeA5sqlTableInputSchema,
   explainA5sqlTableInputSchema,
@@ -37,10 +41,12 @@ import {
   generateModelFilesInputSchema,
   generateSchemaMarkdownInputSchema,
   generateSqlSelectInputSchema,
+  listA5sqlConnectionsInputSchema,
   listA5sqlRelationshipsInputSchema,
   listA5sqlTablesInputSchema,
   parseA5sqlAssetInputSchema,
   parseA5sqlFileInputSchema,
+  readA5sqlAssetInputSchema,
   readA5sqlFileInputSchema,
   reviewA5sqlSchemaInputSchema,
   searchA5sqlAssetsInputSchema,
@@ -53,6 +59,25 @@ export type McpServerOptions = {
 };
 
 export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void> {
+  const server = await createA5sqlMcpServer({ fileArg });
+  const transport = new StdioServerTransport();
+  transport.onerror = (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`a5sql-mcp transport error: ${message}`);
+  };
+  await server.connect(transport);
+  process.stdin.resume();
+
+  const keepAlive = setInterval(() => undefined, 2 ** 30);
+  const shutdown = () => {
+    clearInterval(keepAlive);
+    process.exit(0);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+}
+
+export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promise<McpServer> {
   const initialFile = await parseFile(fileArg);
   const initialFileStat = await stat(initialFile.filePath);
   const getParsedFile = createParsedFileCache(initialFile, {
@@ -98,6 +123,39 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
   );
 
   server.registerTool(
+    "detect_a5sql_locations",
+    {
+      title: "Detect A5:SQL locations",
+      description:
+        "A5:SQL の設定ディレクトリ候補を、存在有無と読み取り可否つきで返します。DB には接続しません。",
+      inputSchema: detectA5sqlLocationsInputSchema,
+    },
+    createDetectA5sqlLocationsHandler(),
+  );
+
+  server.registerTool(
+    "read_a5sql_asset",
+    {
+      title: "Read A5:SQL asset by asset ID",
+      description:
+        "search_a5sql_assets で見つけた assetId の本文を、サイズ制限と秘密情報マスクつきで返します。DB には接続しません。",
+      inputSchema: readA5sqlAssetInputSchema,
+    },
+    createReadA5sqlAssetHandler(),
+  );
+
+  server.registerTool(
+    "list_a5sql_connections",
+    {
+      title: "List masked A5:SQL connection candidates",
+      description:
+        "A5:SQL 設定 root 配下から接続候補を抽出し、秘密情報を返さない形で一覧します。DB には接続しません。",
+      inputSchema: listA5sqlConnectionsInputSchema,
+    },
+    createListA5sqlConnectionsHandler(),
+  );
+
+  server.registerTool(
     "search_a5sql_assets",
     {
       title: "Search A5:SQL assets",
@@ -123,21 +181,7 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
     registerA5erTools(server, getParsedFile);
   }
 
-  const transport = new StdioServerTransport();
-  transport.onerror = (error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`a5sql-mcp transport error: ${message}`);
-  };
-  await server.connect(transport);
-  process.stdin.resume();
-
-  const keepAlive = setInterval(() => undefined, 2 ** 30);
-  const shutdown = () => {
-    clearInterval(keepAlive);
-    process.exit(0);
-  };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
+  return server;
 }
 
 function createParsedFileCache(
