@@ -36,6 +36,8 @@ describe("A5:SQL asset search", () => {
         "CONNECTION_STRING=Server=localhost;User ID=alice;Password=raw-password;Database=app",
         "DSN=mysql://bob:dsn-secret@localhost/app",
         "select 'postgres://alice:url-secret@localhost/app' as url;",
+        "select 'postgres://raw-token@localhost/app' as token_url;",
+        "repository=https://ghp_rawtoken@github.com/example/private-repo.git",
         "host=localhost",
       ].join("\n"),
       "utf8",
@@ -49,10 +51,13 @@ describe("A5:SQL asset search", () => {
     expect(read?.content).toContain("CONNECTION_STRING=***");
     expect(read?.content).toContain("DSN=***");
     expect(read?.content).toContain("postgres://***@localhost/app");
+    expect(read?.content).toContain("https://***@github.com/example/private-repo.git");
     expect(read?.content).toContain("host=localhost");
     expect(serialized).not.toContain("raw-password");
     expect(serialized).not.toContain("dsn-secret");
     expect(serialized).not.toContain("url-secret");
+    expect(serialized).not.toContain("raw-token");
+    expect(serialized).not.toContain("ghp_rawtoken");
     expect(serialized).not.toContain("postgres://alice:raw-password@localhost/app");
     expect(serialized).not.toContain(
       "Server=localhost;User ID=alice;Password=raw-password;Database=app",
@@ -73,6 +78,21 @@ describe("A5:SQL asset search", () => {
       truncated: false,
       bytesRead: 0,
       warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"],
+    });
+  });
+
+  it("does not return content for binary bytes in supported extensions", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "binary.sql");
+    await writeFile(sqlPath, Buffer.from([0x00, 0x01, 0x02, 0x03]));
+
+    const read = await readA5sqlAsset({ roots: [root], path: sqlPath });
+
+    expect(read).toMatchObject({
+      content: "",
+      encoding: "binary",
+      truncated: false,
+      warnings: ["binary_file_not_returned"],
     });
   });
 });

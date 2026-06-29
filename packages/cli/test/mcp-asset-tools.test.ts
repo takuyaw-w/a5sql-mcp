@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -179,6 +179,28 @@ describe("A5:SQL asset MCP tools", () => {
       code: "asset_not_found",
     });
     expect(JSON.stringify(result.structuredContent)).not.toContain("select * from secrets");
+  });
+
+  it("does not follow explicit path symlinks outside provided roots", async () => {
+    const root = await makeTempDir();
+    const outsideRoot = await makeTempDir();
+    const outsidePath = path.join(outsideRoot, "outside.sql");
+    const symlinkPath = path.join(root, "linked-outside.sql");
+    await writeFile(outsidePath, "select * from secrets where token='raw-token';", "utf8");
+    await symlink(outsidePath, symlinkPath);
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      path: symlinkPath,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: false,
+      code: "asset_not_found",
+    });
+    expect(JSON.stringify(result.structuredContent)).not.toContain("select * from secrets");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-token");
   });
 
   it("returns no content and a warning for unsupported binary asset reads", async () => {

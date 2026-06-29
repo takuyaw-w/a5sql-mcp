@@ -3,7 +3,7 @@ const KEY_VALUE_SECRET =
 
 const KEYED_CONNECTION_STRING =
   /\b(database_url|dsn|connection_string|jdbc_url|odbc_connection_string|conn_string|connect_string)\b(\s*[:=]\s*)(["']?)([^\r\n]*)/gi;
-const URL_USERINFO_PASSWORD = /\b([A-Za-z][A-Za-z0-9+.-]*:\/\/)([^@\s/?#]+:[^@\s/?#]*)@/g;
+const URL_USERINFO = /\b([A-Za-z][A-Za-z0-9+.-]*:\/\/)([^@\s/?#]+)@/g;
 const XML_SECRET =
   /<([A-Za-z0-9_.:-]*(?:password|passwd|pwd|pass|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key)[A-Za-z0-9_.:-]*)([^>]*)>([^<]*)<\/\1>/gi;
 
@@ -23,7 +23,7 @@ export function maskSensitiveText(input: string): string {
     .replace(CONNECTION_STRING_SECRET, (_match, key, separator, openQuote, _value, closeQuote) => {
       return `${key}${separator}${openQuote}***${closeQuote}`;
     })
-    .replace(URL_USERINFO_PASSWORD, (_match, prefix) => `${prefix}***@`)
+    .replace(URL_USERINFO, (_match, prefix) => `${prefix}***@`)
     .replace(PEM_PRIVATE_KEY, (_match, label) => {
       return `-----BEGIN ${label}-----\n***\n-----END ${label}-----`;
     });

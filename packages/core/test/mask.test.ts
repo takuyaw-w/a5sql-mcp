@@ -86,6 +86,20 @@ describe("maskSensitiveText", () => {
     expect(masked).not.toContain("url-secret");
     expect(masked).not.toContain("alice:url-secret");
   });
+
+  it("masks inline URL userinfo tokens without passwords", () => {
+    const masked = maskSensitiveText(
+      [
+        "select 'postgres://raw-token@localhost/app' as db_url;",
+        "repository=https://ghp_rawtoken@github.com/example/private-repo.git",
+      ].join("\n"),
+    );
+
+    expect(masked).toContain("postgres://***@localhost/app");
+    expect(masked).toContain("https://***@github.com/example/private-repo.git");
+    expect(masked).not.toContain("raw-token");
+    expect(masked).not.toContain("ghp_rawtoken");
+  });
 });
 
 describe("maskValue", () => {
