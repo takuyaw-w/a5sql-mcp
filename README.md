@@ -262,6 +262,9 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - `describe_a5sql_file`: 起動時に指定されたファイルのパス、種別、サイズ、更新日時を返します。
 - `parse_a5sql_file`: 起動時に指定された `.a5er` / `.sql` ファイルを AI 向けの構造に変換します。デフォルトは `summary` で件数と代表要素だけを返します。`mode: "full"` でも `maxTables` / `maxRelationships` / `maxColumnsPerTable` による上限つきで返します。
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返します。`offsetChars` による文字位置指定、または `startLine` / `maxLines` による行範囲指定ができます。
+- `detect_a5sql_locations`: A5:SQL の設定ディレクトリ候補を、存在有無、読み取り可否、検出理由つきで返します。DB には接続しません。
+- `read_a5sql_asset`: `search_a5sql_assets` で得た `assetId` の本文を、サイズ制限と秘密情報マスクつきで返します。`.a5er` / `.sql` / text 系 asset の内容確認に使います。
+- `list_a5sql_connections`: A5:SQL 設定 root 配下から接続候補を抽出し、秘密情報を返さない形で一覧します。デフォルトでは host、database、user などの非秘密項目もマスクします。
 - `search_a5sql_assets`: `roots` または `A5SQL_MCP_ROOTS` で指定された root 配下から A5:SQL 関連 asset を検索し、`parse_a5sql_asset` に渡せる `assetId` とマスク済み抜粋を返します。DB には接続しません。
 - `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換します。任意の `roots` で探索対象を絞れます。DB には接続しません。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返します。`offset` / `limit` によるページングに対応し、デフォルトは 100 件です。
@@ -292,7 +295,23 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 
 ## 環境変数
 
-基本の CLI / MCP サーバーは、起動時に指定した単一ファイルを読み取ります。`search_a5sql_assets` と `parse_a5sql_asset` では `roots` または `A5SQL_MCP_ROOTS` を使って、指定 root 配下の asset を検索・解析できます。設定ディレクトリ探索そのものを返す tool はまだ公開 API として提供していません。
+基本の CLI / MCP サーバーは、起動時に指定した単一ファイルを読み取ります。asset 横断検索や接続候補の確認では、tool の `roots`、または `A5SQL_MCP_ROOTS` を使って探索対象 root を指定できます。
+
+```bash
+export A5SQL_MCP_ROOTS="/absolute/path/to/a5sql-data"
+```
+
+複数 root を指定する場合は、OS の path delimiter で区切ります。Linux/macOS では `:`、Windows では `;` です。
+
+広すぎる root を指定すると、不要なローカルファイルを探索対象に含める可能性があります。A5:SQL の設定ディレクトリ、保存済み SQL ディレクトリ、ER 図を置いた作業ディレクトリなど、目的に必要な最小範囲を指定してください。
+
+推奨する流れ:
+
+1. `detect_a5sql_locations` で候補 root を確認します。
+2. `search_a5sql_assets` で root 配下の `.a5er`、SQL、text asset を探します。
+3. `read_a5sql_asset` で本文を安全に確認します。
+4. `.a5er` や `.sql` は `parse_a5sql_asset` に渡して構造化します。
+5. `list_a5sql_connections` は接続候補の存在確認に使います。資格情報、完全な接続文字列、DB への接続実行は提供しません。
 
 ## セキュリティ方針
 
