@@ -28,7 +28,7 @@
 - `parse_a5sql_file`: 起動時に指定された `.a5er` / `.sql` ファイルを AI 向けの構造に変換する。デフォルトは summary。`mode: "full"` でも `maxTables` / `maxRelationships` / `maxColumnsPerTable` による上限つきで返す。
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返す。`offsetChars`、または `startLine` / `maxLines` で読み取り範囲を絞れる。
 - `detect_a5sql_locations`: A5:SQL の設定ディレクトリ候補を、存在有無、読み取り可否、検出理由つきで返す。DB には接続しない。
-- `read_a5sql_asset`: `assetId` で指定された asset 本文を、サイズ制限と秘密情報マスクつきで返す。バイナリや unsupported file は本文を返さず warning を返す。
+- `read_a5sql_asset`: `assetId` で指定された asset 本文を、サイズ制限と秘密情報マスクつきで返す。バイナリや未対応ファイルは本文を返さず warning を返す。
 - `list_a5sql_connections`: A5:SQL 設定 root 配下から接続候補を抽出し、秘密情報を返さない形で一覧する。非秘密項目もデフォルトではマスクする。
 - `search_a5sql_assets`: `roots` または `A5SQL_MCP_ROOTS` で指定された root 配下から A5:SQL 関連 asset を検索し、`parse_a5sql_asset` に渡せる `assetId` とマスク済み抜粋を返す。DB には接続しない。
 - `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換する。任意の `roots` で探索対象を絞れる。DB には接続しない。

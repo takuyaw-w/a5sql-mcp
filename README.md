@@ -309,7 +309,7 @@ export A5SQL_MCP_ROOTS="/absolute/path/to/a5sql-data"
 
 1. `detect_a5sql_locations` で候補 root を確認します。
 2. `search_a5sql_assets` で root 配下の `.a5er`、SQL、text asset を探します。
-3. `read_a5sql_asset` で本文を安全に確認します。
+3. `read_a5sql_asset` でサイズ制限とマスク結果を確認しながら本文を読みます。
 4. `.a5er` や `.sql` は `parse_a5sql_asset` に渡して構造化します。
 5. `list_a5sql_connections` は接続候補の存在確認に使います。資格情報、完全な接続文字列、DB への接続実行は提供しません。
 
