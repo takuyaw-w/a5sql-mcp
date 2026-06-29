@@ -46,8 +46,7 @@ describe("A5:SQL MCP server smoke", () => {
         returnedCandidateCount: 1,
       });
     } finally {
-      await client.close();
-      await server.close();
+      await Promise.allSettled([client.close(), server.close()]);
     }
   });
 });
