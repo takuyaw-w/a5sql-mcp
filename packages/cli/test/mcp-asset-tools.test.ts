@@ -5,7 +5,35 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { parseFile } from "../src/index.js";
+import { createReadA5sqlFileHandler } from "../src/mcp/tool-handlers.js";
+
 describe("A5:SQL asset MCP tools", () => {
+  it("masks secrets when reading the configured file", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "credentials.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(
+      sqlPath,
+      [
+        "select * from users where password='raw-password';",
+        "token: raw-token",
+        "api_key=raw-api-key",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const parsed = await parseFile(sqlPath);
+    const result = await createReadA5sqlFileHandler(parsed)({});
+
+    expect(result.structuredContent.text).toContain("password='***'");
+    expect(result.structuredContent.text).toContain("token: ***");
+    expect(result.structuredContent.text).toContain("api_key=***");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-password");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-token");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-api-key");
+  });
+
   it("parses a discovered SQL asset by asset ID", async () => {
     const root = await makeTempDir();
     const sqlPath = path.join(root, "queries", "find-users.sql");

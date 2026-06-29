@@ -1,6 +1,10 @@
 import { stat } from "node:fs/promises";
 
-import { parseA5sqlAsset, type ParsedAssetResult } from "@takuyaw-w/a5sql-mcp-core";
+import {
+  maskSensitiveText,
+  parseA5sqlAsset,
+  type ParsedAssetResult,
+} from "@takuyaw-w/a5sql-mcp-core";
 
 import { readTextFileWithMetadata, type CliResult } from "../index.js";
 import {
@@ -90,8 +94,9 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
   }) => {
     const limit = maxChars ?? DEFAULT_FILE_READ_MAX_CHARS;
     const decoded = await readTextFileWithMetadata(initialFile.filePath);
+    const maskedText = maskSensitiveText(decoded.text);
     return jsonResult(
-      sliceFileText(decoded.text, {
+      sliceFileText(maskedText, {
         filePath: initialFile.filePath,
         kind: initialFile.kind,
         encoding: decoded.encoding,
