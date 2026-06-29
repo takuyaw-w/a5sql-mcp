@@ -22,6 +22,16 @@ export async function detectA5sqlLocations(
     rawCandidates.push({ path: root, source: "extra", label: "extraRoots" });
   }
 
+  const includeDefaults = options.includeDefaults ?? true;
+  if (!includeDefaults) {
+    const unique = dedupePaths(rawCandidates);
+    const results: LocationCandidate[] = [];
+    for (const candidate of unique) {
+      results.push(await withAccessState(candidate));
+    }
+    return results;
+  }
+
   if (platform === "win32") {
     addIfPresent(rawCandidates, env.APPDATA, "platform", "APPDATA");
     addIfPresent(rawCandidates, env.LOCALAPPDATA, "platform", "LOCALAPPDATA");

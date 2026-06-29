@@ -14,6 +14,7 @@ export type DetectLocationOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   platform?: NodeJS.Platform;
+  includeDefaults?: boolean;
 };
 
 export type AssetRecord = {
