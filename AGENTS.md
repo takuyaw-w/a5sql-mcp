@@ -77,6 +77,7 @@
 ## 実装ルール
 
 - ローカルコマンドは原則として `rtk` を付けて実行する。
+- ROADMAP 実装や複数ファイルにまたがる実装では、implementation plan の先頭に Task 0 として `rtk pnpm agent:preflight` を入れ、実装開始前に実行する。`main` / `master` 上で実装する例外は、ユーザーの明示承認を plan または作業ログに残し、必要な場合だけ `--allow-main` を使う。
 - リポジトリ内の既存方針が増えた場合は、その方針を優先する。
 - 作業開始時は、依頼内容に該当する Codex/AI 向け skill がないか確認し、該当する場合は実作業や回答より前に読む。ユーザーが `using-superpowers` などの skill 名を明示した場合は、その skill を必ず読んでから進める。
 - 複数の skill が該当する場合は、進め方を決める process 系 skill を先に読み、その後に `a5sql-mcp` などのドメイン固有 skill を読む。

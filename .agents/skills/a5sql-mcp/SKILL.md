@@ -34,6 +34,8 @@ ROADMAP.md に沿った実装で、Superpowers の brainstorming / writing-plans
 
 ## 作業の進め方
 
+ROADMAP 実装や複数ファイルにまたがる実装では、implementation plan の先頭に Task 0 として `rtk pnpm agent:preflight` を入れ、実装開始前に実行します。`main` / `master` 上で実装する例外は、ユーザーの明示承認を plan または作業ログに残し、必要な場合だけ `--allow-main` を使います。
+
 ### 1. 調査
 
 - A5:SQL の保存場所候補、ファイル形式、文字コード、サンプルデータの有無を確認する。

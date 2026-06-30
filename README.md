@@ -292,6 +292,16 @@ pnpm published:check
 
 `published:check` は parser / core / cli の tarball を一時ディレクトリに install し、install 後の `a5sql-mcp --mcp example/schema.a5er` から `tools/list` を確認します。`Tools: (none)` や期待 tool の不足は失敗として扱います。
 
+## 開発者向け実装 preflight
+
+ROADMAP 実装や複数ファイルにまたがる実装では、implementation plan の先頭に Task 0 として `agent:preflight` を入れます。実装開始前に次を実行してください。
+
+```bash
+pnpm agent:preflight
+```
+
+`agent:preflight` は `main` / `master`、detached HEAD、dirty working tree を既定で拒否します。例外的に `main` で実装する場合は、ユーザーの明示承認を plan または作業ログに残してから `pnpm agent:preflight -- --allow-main` を使います。
+
 ## CLI
 
 ローカル開発中は、まず build してから root script で実行します。

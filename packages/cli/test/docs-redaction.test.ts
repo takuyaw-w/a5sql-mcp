@@ -55,4 +55,22 @@ describe("public documentation redaction audit", () => {
       );
     }
   });
+
+  it("documents the agent preflight guard before implementation", async () => {
+    const docs = await Promise.all(
+      [...PUBLIC_GUIDANCE_FILES, "../../../docs/superpowers/plans/README.md"].map(
+        async (relativePath) => ({
+          relativePath,
+          text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+        }),
+      ),
+    );
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document agent preflight`).toContain("agent:preflight");
+      expect(text, `${relativePath} should document Task 0`).toContain("Task 0");
+      expect(text, `${relativePath} should document main guard`).toContain("main");
+      expect(text, `${relativePath} should document explicit approval`).toContain("明示");
+    }
+  });
 });
