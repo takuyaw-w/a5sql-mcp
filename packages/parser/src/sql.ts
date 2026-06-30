@@ -302,26 +302,35 @@ function detectReferencedTables(statement: string): string[] {
     }
 
     if (char === '"' || char === "`") {
-      const token = readDelimitedIdentifier(statement, index, char);
-      if (pendingTableKeyword && token.value) {
-        tables.add(token.value);
+      if (pendingTableKeyword) {
+        const tableReference = readTableReference(statement, index);
+        if (tableReference.value) {
+          tables.add(tableReference.value);
+        }
+        pendingTableKeyword = false;
+        index = tableReference.endIndex;
+        continue;
       }
-      pendingTableKeyword = false;
+      const token = readDelimitedIdentifier(statement, index, char);
       index = token.endIndex;
       continue;
     }
 
     if (isSqlIdentifierChar(char)) {
+      if (pendingTableKeyword) {
+        const tableReference = readTableReference(statement, index);
+        if (tableReference.value) {
+          tables.add(tableReference.value);
+        }
+        pendingTableKeyword = false;
+        index = tableReference.endIndex;
+        continue;
+      }
       const startIndex = index;
       while (isSqlIdentifierChar(statement[index + 1] ?? "")) {
         index += 1;
       }
       const token = statement.slice(startIndex, index + 1);
-      if (pendingTableKeyword) {
-        tables.add(token);
-        pendingTableKeyword = false;
-        continue;
-      }
       pendingTableKeyword = isTableReferenceKeyword(token);
       continue;
     }
@@ -332,6 +341,50 @@ function detectReferencedTables(statement: string): string[] {
   }
 
   return [...tables].sort();
+}
+
+function readTableReference(
+  statement: string,
+  startIndex: number,
+): { value: string | null; endIndex: number } {
+  const segments: string[] = [];
+  let index = skipSqlWhitespace(statement, startIndex);
+
+  while (index < statement.length) {
+    const char = statement[index] ?? "";
+    let segment: { value: string; endIndex: number } | null = null;
+
+    if (char === '"' || char === "`") {
+      segment = readDelimitedIdentifier(statement, index, char);
+    } else if (isSqlIdentifierChar(char)) {
+      const segmentStartIndex = index;
+      while (isSqlIdentifierChar(statement[index + 1] ?? "")) {
+        index += 1;
+      }
+      segment = {
+        value: statement.slice(segmentStartIndex, index + 1),
+        endIndex: index,
+      };
+    }
+
+    if (!segment?.value) {
+      break;
+    }
+
+    segments.push(segment.value);
+    index = skipSqlWhitespace(statement, segment.endIndex + 1);
+
+    if (statement[index] !== ".") {
+      return { value: segments.join("."), endIndex: segment.endIndex };
+    }
+
+    index = skipSqlWhitespace(statement, index + 1);
+  }
+
+  return {
+    value: segments.length > 0 ? segments.join(".") : null,
+    endIndex: Math.max(startIndex, index) - 1,
+  };
 }
 
 function readDelimitedIdentifier(
@@ -356,8 +409,16 @@ function readDelimitedIdentifier(
   return { value, endIndex: statement.length - 1 };
 }
 
+function skipSqlWhitespace(statement: string, startIndex: number): number {
+  let index = startIndex;
+  while (/\s/.test(statement[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
 function isSqlIdentifierChar(char: string): boolean {
-  return /[A-Za-z0-9_.]/.test(char);
+  return /[A-Za-z0-9_]/.test(char);
 }
 
 function isTableReferenceKeyword(token: string): boolean {
