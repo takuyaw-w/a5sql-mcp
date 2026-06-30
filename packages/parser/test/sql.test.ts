@@ -83,10 +83,9 @@ describe("parseSqlStatements", () => {
   });
 
   it("extracts referenced tables from quoted identifiers in table positions", () => {
-    const statements = parseSqlStatements([
-      'select * from "users";',
-      "select * from `teams`;",
-    ].join("\n"));
+    const statements = parseSqlStatements(
+      ['select * from "users";', "select * from `teams`;"].join("\n"),
+    );
 
     expect(statements).toHaveLength(2);
     expect(statements[0]?.referencedTables).toEqual(["users"]);
@@ -94,11 +93,13 @@ describe("parseSqlStatements", () => {
   });
 
   it("extracts referenced tables from qualified quoted identifiers in table positions", () => {
-    const statements = parseSqlStatements([
-      'select * from schema."users";',
-      'select * from "public"."teams";',
-      "select * from `app`.`teams`;",
-    ].join("\n"));
+    const statements = parseSqlStatements(
+      [
+        'select * from schema."users";',
+        'select * from "public"."teams";',
+        "select * from `app`.`teams`;",
+      ].join("\n"),
+    );
 
     expect(statements).toHaveLength(3);
     expect(statements[0]?.referencedTables).toEqual(["schema.users"]);

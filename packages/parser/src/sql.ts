@@ -126,9 +126,7 @@ function isBackslashEscaped(text: string, quoteIndex: number): boolean {
 
 function detectOperation(statement: string): string {
   const source = stripSqlNonCodeText(statement);
-  const match = source.match(
-    /^\s*(select|insert|update|delete|merge|create|alter|drop|with)\b/i,
-  );
+  const match = source.match(/^\s*(select|insert|update|delete|merge|create|alter|drop|with)\b/i);
   return match?.[1]?.toLocaleLowerCase() ?? "unknown";
 }
 
