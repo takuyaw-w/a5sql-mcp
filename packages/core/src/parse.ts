@@ -19,7 +19,13 @@ export async function parseA5sqlAsset(
     return {
       asset: read.asset,
       parser: "a5er-ini-v19",
-      summary: `${parsed.tables.length} tables, ${parsed.relationships.length} relationships`,
+      summary:
+        parsed.parseStatus === "unrecognized"
+          ? "unrecognized A5:ER document"
+          : `${parsed.tables.length} tables, ${parsed.relationships.length} relationships`,
+      parseStatus: parsed.parseStatus,
+      encoding: parsed.encoding,
+      fileEncoding: parsed.fileEncoding,
       manager: parsed.manager,
       tables: parsed.tables,
       relationships: parsed.relationships,

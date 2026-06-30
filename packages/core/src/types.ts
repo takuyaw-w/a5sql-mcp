@@ -1,3 +1,10 @@
+import type {
+  ParsedA5erDocument,
+  ParsedA5erRelationship,
+  ParsedA5erTable,
+  ParsedSqlStatement,
+} from "@takuyaw-w/a5sql-mcp-parser";
+
 export type A5sqlAssetKind = "sql" | "er" | "config" | "text" | "database" | "unknown";
 
 export type LocationCandidate = {
@@ -66,16 +73,13 @@ export type ReadAssetResult = {
   warnings: string[];
 };
 
-import type {
-  ParsedA5erRelationship,
-  ParsedA5erTable,
-  ParsedSqlStatement,
-} from "@takuyaw-w/a5sql-mcp-parser";
-
 export type ParsedAssetResult = {
   asset: AssetRecord;
   parser: "a5er-ini-v19" | "sql-heuristic" | "text-summary" | "unsupported";
   summary: string;
+  parseStatus?: ParsedA5erDocument["parseStatus"];
+  encoding?: string;
+  fileEncoding?: string;
   manager?: Record<string, unknown>;
   tables?: ParsedA5erTable[];
   relationships?: ParsedA5erRelationship[];
