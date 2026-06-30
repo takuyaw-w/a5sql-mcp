@@ -34,12 +34,21 @@ const DEFAULT_JOIN_TABLE_LIMIT = 10;
 const DEFAULT_COLUMN_SEARCH_LIMIT = 100;
 const DEFAULT_SCHEMA_SUGGESTION_LIMIT = 100;
 
+function withUntrustedContentSignal(output: JsonObject): JsonObject {
+  return {
+    ...output,
+    contentIsUntrusted: true,
+  };
+}
+
 export function listA5sqlRelationships(
   result: A5erCliResult,
   options: { tableName?: string } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { tableName: options.tableName, relationships: [] });
+    return withUntrustedContentSignal(
+      unrecognizedA5erResult(result, { tableName: options.tableName, relationships: [] }),
+    );
   }
   const index = buildA5erIndex(result.parsed);
   const table = options.tableName ? findTable(index, options.tableName) : undefined;
@@ -52,13 +61,13 @@ export function listA5sqlRelationships(
   const relationships = sourceRelationships.map((relationship) =>
     relationshipSummary(relationship, index),
   );
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     tableName: options.tableName,
     foundTable: options.tableName ? Boolean(table) : undefined,
     relationships,
-  };
+  });
 }
 
 export function listA5sqlTables(
@@ -66,13 +75,13 @@ export function listA5sqlTables(
   options: { offset?: number; limit?: number } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { tables: [] });
+    return withUntrustedContentSignal(unrecognizedA5erResult(result, { tables: [] }));
   }
   const start = options.offset ?? 0;
   const count = options.limit ?? DEFAULT_TABLE_LIST_LIMIT;
   const tables = result.parsed.tables.slice(start, start + count);
   const hasMore = start + tables.length < result.parsed.tables.length;
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     totalTableCount: result.parsed.tables.length,
@@ -82,7 +91,7 @@ export function listA5sqlTables(
     hasMore,
     truncated: hasMore,
     tables: tables.map(tableSummary),
-  };
+  });
 }
 
 export function findA5sqlTables(
@@ -90,7 +99,9 @@ export function findA5sqlTables(
   options: { query?: string; limit?: number } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { query: options.query, tables: [] });
+    return withUntrustedContentSignal(
+      unrecognizedA5erResult(result, { query: options.query, tables: [] }),
+    );
   }
   const query = options.query?.trim();
   const limit = options.limit ?? 20;
@@ -115,13 +126,13 @@ export function findA5sqlTables(
       primaryKeyColumns: primaryKeyColumns(table),
       matchedBy: matches,
     }));
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     query,
     limit,
     tables,
-  };
+  });
 }
 
 export function describeA5sqlTable(
@@ -129,23 +140,25 @@ export function describeA5sqlTable(
   options: { tableName: string },
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { found: false, tableName: options.tableName });
+    return withUntrustedContentSignal(
+      unrecognizedA5erResult(result, { found: false, tableName: options.tableName }),
+    );
   }
   const index = buildA5erIndex(result.parsed);
   const table = findTable(index, options.tableName);
   if (!table) {
-    return {
+    return withUntrustedContentSignal({
       found: false,
       filePath: result.filePath,
       tableName: options.tableName,
       nextAction: "list_a5sql_tables で利用可能な tableName を確認してください。",
-    };
+    });
   }
-  return {
+  return withUntrustedContentSignal({
     found: true,
     filePath: result.filePath,
     table,
-  };
+  });
 }
 
 export function explainA5sqlTable(
@@ -153,17 +166,19 @@ export function explainA5sqlTable(
   options: { tableName: string; maxRelatedTables?: number },
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { found: false, tableName: options.tableName });
+    return withUntrustedContentSignal(
+      unrecognizedA5erResult(result, { found: false, tableName: options.tableName }),
+    );
   }
   const index = buildA5erIndex(result.parsed);
   const table = findTable(index, options.tableName);
   if (!table) {
-    return {
+    return withUntrustedContentSignal({
       found: false,
       filePath: result.filePath,
       tableName: options.tableName,
       nextAction: "find_a5sql_tables で利用可能な tableName を確認してください。",
-    };
+    });
   }
 
   const maxRelatedTables = options.maxRelatedTables ?? DEFAULT_JOIN_TABLE_LIMIT;
@@ -189,7 +204,7 @@ export function explainA5sqlTable(
       : "主キーが見つかりません。",
   ];
 
-  return {
+  return withUntrustedContentSignal({
     found: true,
     filePath: result.filePath,
     kind: result.kind,
@@ -226,7 +241,7 @@ export function explainA5sqlTable(
         ? "データ型が未設定のカラムがあります。migration 生成前に確認してください。"
         : undefined,
     ].filter((value): value is string => value !== undefined),
-  };
+  });
 }
 
 export function findA5sqlColumns(
@@ -242,7 +257,9 @@ export function findA5sqlColumns(
   } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { query: options.query, columns: [] });
+    return withUntrustedContentSignal(
+      unrecognizedA5erResult(result, { query: options.query, columns: [] }),
+    );
   }
   const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
@@ -288,7 +305,7 @@ export function findA5sqlColumns(
   const limit = options.limit ?? DEFAULT_COLUMN_SEARCH_LIMIT;
   const page = matches.slice(offset, offset + limit);
 
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     query,
@@ -313,7 +330,7 @@ export function findA5sqlColumns(
       matchedBy,
     })),
     warnings,
-  };
+  });
 }
 
 export function suggestSchemaChanges(
@@ -321,7 +338,9 @@ export function suggestSchemaChanges(
   options: { maxSuggestions?: number; includeInfo?: boolean } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { found: false, suggestions: [] });
+    return withUntrustedContentSignal(
+      unrecognizedA5erResult(result, { found: false, suggestions: [] }),
+    );
   }
   const includeInfo = options.includeInfo ?? true;
   const maxSuggestions = options.maxSuggestions ?? DEFAULT_SCHEMA_SUGGESTION_LIMIT;
@@ -338,7 +357,7 @@ export function suggestSchemaChanges(
     .filter((suggestion): suggestion is JsonObject => suggestion !== undefined);
   const limitedSuggestions = suggestions.slice(0, maxSuggestions);
 
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     tableCount: result.parsed.tables.length,
@@ -351,7 +370,7 @@ export function suggestSchemaChanges(
     summary: review.summary,
     suggestions: limitedSuggestions,
     nextAction: "提案は設計レビュー用です。A5:ER ファイル、DB、生成ファイルには書き込みません。",
-  };
+  });
 }
 
 export function generateMermaidErDiagram(
@@ -364,7 +383,7 @@ export function generateMermaidErDiagram(
   } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { found: false });
+    return withUntrustedContentSignal(unrecognizedA5erResult(result, { found: false }));
   }
   const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
@@ -432,7 +451,7 @@ export function generateMermaidErDiagram(
     lines.push("  }");
   }
 
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     tableCount: filteredTables.length,
@@ -448,7 +467,7 @@ export function generateMermaidErDiagram(
     truncated: matchingTables.length > filteredTables.length,
     mermaid: lines.join("\n"),
     warnings,
-  };
+  });
 }
 
 export function reviewA5sqlSchema(
@@ -456,7 +475,7 @@ export function reviewA5sqlSchema(
   options: { maxIssues?: number; includeInfo?: boolean } = {},
 ): JsonObject {
   if (!isRecognizedA5erParsed(result)) {
-    return unrecognizedA5erResult(result, { found: false, issues: [] });
+    return withUntrustedContentSignal(unrecognizedA5erResult(result, { found: false, issues: [] }));
   }
   const maxIssues = options.maxIssues ?? 100;
   const includeInfo = options.includeInfo ?? true;
@@ -533,7 +552,7 @@ export function reviewA5sqlSchema(
 
   const filteredIssues = includeInfo ? issues : issues.filter((issue) => issue.severity !== "info");
   const limitedIssues = filteredIssues.slice(0, maxIssues);
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     tableCount: result.parsed.tables.length,
@@ -542,7 +561,7 @@ export function reviewA5sqlSchema(
     truncated: filteredIssues.length > limitedIssues.length,
     summary: summarizeIssues(filteredIssues),
     issues: limitedIssues,
-  };
+  });
 }
 
 export function formatFullParsedFile(
@@ -554,10 +573,10 @@ export function formatFullParsedFile(
   } = {},
 ): JsonObject {
   if (!isA5erParsed(result)) {
-    return {
+    return withUntrustedContentSignal({
       ...result,
       parsed: maskParsedValue(result.parsed),
-    };
+    });
   }
 
   const maxTables = options.maxTables ?? DEFAULT_PARSE_FULL_TABLE_LIMIT;
@@ -577,7 +596,7 @@ export function formatFullParsedFile(
     columns: limitedTables.some((table) => table.columnsTruncated),
   };
 
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     encoding: result.encoding,
@@ -600,7 +619,7 @@ export function formatFullParsedFile(
       truncated.tables || truncated.relationships || truncated.columns
         ? "list_a5sql_tables, describe_a5sql_table, list_a5sql_relationships で必要な範囲を絞ってください。"
         : undefined,
-  };
+  });
 }
 
 export function summarizeParsedFile(
@@ -614,7 +633,7 @@ export function summarizeParsedFile(
     const relationshipSummaries = result.parsed.relationships
       .slice(0, limit)
       .map((relationship) => relationshipSummary(relationship, index));
-    return {
+    return withUntrustedContentSignal({
       filePath: result.filePath,
       kind: result.kind,
       mode: "summary",
@@ -635,7 +654,7 @@ export function summarizeParsedFile(
       },
       nextAction:
         "list_a5sql_tables, find_a5sql_tables, describe_a5sql_table で必要な範囲を絞ってください。全量が必要な場合は mode=full を指定してください。",
-    };
+    });
   }
 
   if (
@@ -646,7 +665,7 @@ export function summarizeParsedFile(
     Array.isArray(result.parsed.statements)
   ) {
     const statements = maskParsedValue(result.parsed.statements.slice(0, limit)) as unknown[];
-    return {
+    return withUntrustedContentSignal({
       filePath: result.filePath,
       kind: result.kind,
       mode: "summary",
@@ -656,7 +675,7 @@ export function summarizeParsedFile(
       statements,
       truncated: result.parsed.statements.length > statements.length,
       nextAction: "全量が必要な場合は mode=full を指定してください。",
-    };
+    });
   }
 
   if (
@@ -668,7 +687,7 @@ export function summarizeParsedFile(
   ) {
     const maxChars = Math.min(limit * 100, 10_000);
     const text = maskSensitiveText(result.parsed.text.slice(0, maxChars));
-    return {
+    return withUntrustedContentSignal({
       filePath: result.filePath,
       kind: result.kind,
       mode: "summary",
@@ -678,16 +697,16 @@ export function summarizeParsedFile(
       text,
       truncated: result.parsed.text.length > text.length,
       nextAction: "read_a5sql_file で必要な範囲を指定するか、mode=full を指定してください。",
-    };
+    });
   }
 
-  return {
+  return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     mode: "summary",
     fileEncoding: result.encoding,
     parsed: maskParsedValue(result.parsed),
-  };
+  });
 }
 
 function maskParsedValue(value: unknown): unknown {
@@ -728,7 +747,7 @@ export function sliceFileText(
     const outputText = selectedText.slice(0, options.maxChars);
     const charTruncated = selectedText.length > outputText.length;
     const lineTruncated = endIndex < lines.length;
-    return {
+    return withUntrustedContentSignal({
       filePath: options.filePath,
       kind: options.kind,
       encoding: options.encoding,
@@ -742,14 +761,14 @@ export function sliceFileText(
       truncated: charTruncated || lineTruncated,
       hasMore: charTruncated || lineTruncated,
       nextStartLine: lineTruncated ? endIndex + 1 : undefined,
-    };
+    });
   }
 
   const offset = options.offsetChars ?? 0;
   const outputText = text.slice(offset, offset + options.maxChars);
   const nextOffset = offset + outputText.length;
   const hasMore = nextOffset < text.length;
-  return {
+  return withUntrustedContentSignal({
     filePath: options.filePath,
     kind: options.kind,
     encoding: options.encoding,
@@ -761,7 +780,7 @@ export function sliceFileText(
     truncated: hasMore,
     hasMore,
     nextOffsetChars: hasMore ? nextOffset : undefined,
-  };
+  });
 }
 
 function tableSummary(table: ParsedA5erTable): JsonObject {

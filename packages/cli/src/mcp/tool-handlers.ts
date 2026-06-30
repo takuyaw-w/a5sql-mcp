@@ -450,6 +450,7 @@ export function createSearchA5sqlAssetsHandler() {
     return jsonResult({
       query: query ?? null,
       roots: roots ?? null,
+      contentIsUntrusted: true,
       effectiveLimit: searchResult.effectiveLimit,
       count: assets.length,
       returnedAssetCount: assets.length,
