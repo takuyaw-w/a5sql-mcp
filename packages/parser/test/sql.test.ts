@@ -82,6 +82,17 @@ describe("parseSqlStatements", () => {
     expect(statements[0]?.referencedTables).toEqual(["users"]);
   });
 
+  it("extracts referenced tables from quoted identifiers in table positions", () => {
+    const statements = parseSqlStatements([
+      'select * from "users";',
+      "select * from `teams`;",
+    ].join("\n"));
+
+    expect(statements).toHaveLength(2);
+    expect(statements[0]?.referencedTables).toEqual(["users"]);
+    expect(statements[1]?.referencedTables).toEqual(["teams"]);
+  });
+
   it("keeps a broken quoted SQL fragment bounded and non-crashing", () => {
     const statements = parseSqlStatements(`
       select * from users where note = 'unterminated; select * from secrets;
