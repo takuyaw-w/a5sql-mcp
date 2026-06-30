@@ -125,13 +125,112 @@ function isBackslashEscaped(text: string, quoteIndex: number): boolean {
 }
 
 function detectOperation(statement: string): string {
-  const match = statement.match(
+  const source = stripSqlNonCodeText(statement);
+  const match = source.match(
     /^\s*(select|insert|update|delete|merge|create|alter|drop|with)\b/i,
   );
   return match?.[1]?.toLocaleLowerCase() ?? "unknown";
 }
 
+function stripSqlNonCodeText(statement: string): string {
+  let stripped = "";
+  let quote: "'" | null = null;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let dollarQuoteTag: string | null = null;
+
+  for (let index = 0; index < statement.length; index += 1) {
+    const char = statement[index] ?? "";
+    const next = statement[index + 1];
+
+    if (dollarQuoteTag) {
+      if (statement.startsWith(dollarQuoteTag, index)) {
+        stripped += maskSqlNonCodeText(dollarQuoteTag);
+        index += dollarQuoteTag.length - 1;
+        dollarQuoteTag = null;
+      } else {
+        stripped += maskSqlNonCodeChar(char);
+      }
+      continue;
+    }
+
+    if (inLineComment) {
+      stripped += maskSqlNonCodeChar(char);
+      if (char === "\n" || char === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      stripped += maskSqlNonCodeChar(char);
+      if (char === "*" && next === "/") {
+        stripped += maskSqlNonCodeChar(next);
+        index += 1;
+        inBlockComment = false;
+      }
+      continue;
+    }
+
+    if (quote) {
+      stripped += maskSqlNonCodeChar(char);
+      if (char === quote) {
+        if (next === quote) {
+          stripped += maskSqlNonCodeChar(next);
+          index += 1;
+          continue;
+        }
+        if (!isBackslashEscaped(statement, index)) {
+          quote = null;
+        }
+      }
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      stripped += "  ";
+      index += 1;
+      inLineComment = true;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      stripped += "  ";
+      index += 1;
+      inBlockComment = true;
+      continue;
+    }
+
+    const dollarQuoteMatch = statement.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+    if (dollarQuoteMatch?.[0]) {
+      dollarQuoteTag = dollarQuoteMatch[0];
+      stripped += maskSqlNonCodeText(dollarQuoteTag);
+      index += dollarQuoteTag.length - 1;
+      continue;
+    }
+
+    if (char === "'") {
+      quote = char;
+      stripped += " ";
+      continue;
+    }
+
+    stripped += char;
+  }
+
+  return stripped;
+}
+
+function maskSqlNonCodeText(text: string): string {
+  return [...text].map(maskSqlNonCodeChar).join("");
+}
+
+function maskSqlNonCodeChar(char: string | undefined): string {
+  return char === "\n" || char === "\r" ? char : " ";
+}
+
 function detectReferencedTables(statement: string): string[] {
+  const source = stripSqlNonCodeText(statement);
   const tables = new Set<string>();
   const patterns = [
     /\bfrom\s+([A-Za-z0-9_."]+)/gi,
@@ -140,7 +239,7 @@ function detectReferencedTables(statement: string): string[] {
     /\bupdate\s+([A-Za-z0-9_."]+)/gi,
   ];
   for (const pattern of patterns) {
-    for (const match of statement.matchAll(pattern)) {
+    for (const match of source.matchAll(pattern)) {
       if (match[1]) {
         tables.add(match[1].replace(/^"|"$/g, ""));
       }
