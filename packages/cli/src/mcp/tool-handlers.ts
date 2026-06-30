@@ -34,6 +34,7 @@ import {
   type CompareA5erWithLiveSchemaOptions,
   unrecognizedA5erResult,
 } from "./tool-outputs.js";
+import { withUntrustedPayloadContract } from "./output-contract.js";
 import type { JsonObject, ParsedFileLoader } from "./types.js";
 
 const DEFAULT_FILE_READ_MAX_CHARS = 100_000;
@@ -119,20 +120,21 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
       startLine,
       maxLines,
     });
-    return jsonResult({
-      ...sliced,
-      contentIsUntrusted: true,
-      code: decoded.truncated ? "file_too_large" : undefined,
-      sizeBytes: decoded.sizeBytes,
-      bytesRead: decoded.bytesRead,
-      maxBytes: initialFile.fileRead.maxBytes,
-      truncated: Boolean(sliced.truncated) || decoded.truncated,
-      hasMore: Boolean(sliced.hasMore) || decoded.truncated,
-      warnings: decoded.truncated ? ["file_too_large"] : [],
-      nextAction: decoded.truncated
-        ? "起動時ファイルが上限を超えています。より小さいファイルを指定するか、必要な asset root を絞って read_a5sql_asset を使ってください。"
-        : sliced.nextAction,
-    });
+    return jsonResult(
+      withUntrustedPayloadContract({
+        ...sliced,
+        code: decoded.truncated ? "file_too_large" : undefined,
+        sizeBytes: decoded.sizeBytes,
+        bytesRead: decoded.bytesRead,
+        maxBytes: initialFile.fileRead.maxBytes,
+        truncated: Boolean(sliced.truncated) || decoded.truncated,
+        hasMore: Boolean(sliced.hasMore) || decoded.truncated,
+        warnings: decoded.truncated ? ["file_too_large"] : [],
+        nextAction: decoded.truncated
+          ? "起動時ファイルが上限を超えています。より小さいファイルを指定するか、必要な asset root を絞って read_a5sql_asset を使ってください。"
+          : sliced.nextAction,
+      }),
+    );
   };
 }
 
@@ -226,31 +228,32 @@ export function createReadA5sqlAssetHandler() {
       maxChars,
       alreadyTruncated: result.truncated,
     });
-    return jsonResult({
-      found: true,
-      asset: {
-        assetId: result.asset.id,
-        kind: result.asset.kind,
-        fileName: result.asset.fileName,
-        path: result.asset.path,
-        size: result.asset.size,
-        modifiedAt: result.asset.modifiedAt,
-      },
-      content: sliced.content,
-      encoding: normalizeEncodingName(result.encoding),
-      truncated: sliced.truncated,
-      bytesRead: result.bytesRead,
-      offsetChars: sliced.offsetChars,
-      maxChars: sliced.maxChars,
-      returnedChars: sliced.returnedChars,
-      totalChars: sliced.totalChars,
-      warnings: result.warnings,
-      contentIsUntrusted: true,
-      nextAction:
-        result.asset.kind === "er" || result.asset.kind === "sql"
-          ? "parse_a5sql_asset に同じ assetId を渡すと構造化できます。"
-          : "必要な範囲だけ maxBytes を増やして読み取ってください。",
-    });
+    return jsonResult(
+      withUntrustedPayloadContract({
+        found: true,
+        asset: {
+          assetId: result.asset.id,
+          kind: result.asset.kind,
+          fileName: result.asset.fileName,
+          path: result.asset.path,
+          size: result.asset.size,
+          modifiedAt: result.asset.modifiedAt,
+        },
+        content: sliced.content,
+        encoding: normalizeEncodingName(result.encoding),
+        truncated: sliced.truncated,
+        bytesRead: result.bytesRead,
+        offsetChars: sliced.offsetChars,
+        maxChars: sliced.maxChars,
+        returnedChars: sliced.returnedChars,
+        totalChars: sliced.totalChars,
+        warnings: result.warnings,
+        nextAction:
+          result.asset.kind === "er" || result.asset.kind === "sql"
+            ? "parse_a5sql_asset に同じ assetId を渡すと構造化できます。"
+            : "必要な範囲だけ maxBytes を増やして読み取ってください。",
+      }),
+    );
   };
 }
 
@@ -447,29 +450,30 @@ export function createSearchA5sqlAssetsHandler() {
     });
     const { assets } = searchResult;
 
-    return jsonResult({
-      query: query ?? null,
-      roots: roots ?? null,
-      contentIsUntrusted: true,
-      effectiveLimit: searchResult.effectiveLimit,
-      count: assets.length,
-      returnedAssetCount: assets.length,
-      visitedFileCount: searchResult.visitedFileCount,
-      truncated: searchResult.truncated,
-      cutoffReason: searchResult.cutoffReason,
-      warnings: [],
-      nextAction: "parse_a5sql_asset に assetId を渡すと内容を解析できます。",
-      assets: assets.map((asset) => ({
-        assetId: asset.id,
-        kind: asset.kind,
-        fileName: asset.fileName,
-        path: asset.path,
-        size: asset.size,
-        modifiedAt: asset.modifiedAt,
-        snippet: asset.snippet ?? null,
-        warning: asset.warning ?? null,
-      })),
-    });
+    return jsonResult(
+      withUntrustedPayloadContract({
+        query: query ?? null,
+        roots: roots ?? null,
+        effectiveLimit: searchResult.effectiveLimit,
+        count: assets.length,
+        returnedAssetCount: assets.length,
+        visitedFileCount: searchResult.visitedFileCount,
+        truncated: searchResult.truncated,
+        cutoffReason: searchResult.cutoffReason,
+        warnings: [],
+        nextAction: "parse_a5sql_asset に assetId を渡すと内容を解析できます。",
+        assets: assets.map((asset) => ({
+          assetId: asset.id,
+          kind: asset.kind,
+          fileName: asset.fileName,
+          path: asset.path,
+          size: asset.size,
+          modifiedAt: asset.modifiedAt,
+          snippet: asset.snippet ?? null,
+          warning: asset.warning ?? null,
+        })),
+      }),
+    );
   };
 }
 
@@ -987,5 +991,5 @@ function formatParsedAsset(
     output.statementsTruncated = result.statements.length > statements.length;
   }
 
-  return output;
+  return withUntrustedPayloadContract(output);
 }

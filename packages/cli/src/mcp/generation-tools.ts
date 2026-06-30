@@ -12,6 +12,7 @@ import {
   primaryKeyColumns,
   unrecognizedA5erResult,
 } from "./a5er-output-utils.js";
+import { withDraftOutputContract } from "./output-contract.js";
 import type {
   LiveSchemaColumn,
   LiveSchemaDocument,
@@ -25,19 +26,8 @@ const DEFAULT_SCHEMA_MARKDOWN_TABLE_LIMIT = 100;
 const DEFAULT_SCHEMA_MARKDOWN_COLUMNS_PER_TABLE_LIMIT = 100;
 const DEFAULT_MIGRATION_OPERATION_LIMIT = 100;
 
-const GENERATION_DRAFT_DISCLOSURE = {
-  outputKind: "draft",
-  readOnly: true,
-  writesToFileSystem: false,
-  connectsToDatabase: false,
-  executesSql: false,
-} as const;
-
 function withGenerationDraftDisclosure(output: JsonObject): JsonObject {
-  return {
-    ...GENERATION_DRAFT_DISCLOSURE,
-    ...output,
-  };
+  return withDraftOutputContract(output);
 }
 
 export function generateSqlSelect(

@@ -293,11 +293,48 @@ describe("A5:ER MCP tool helpers", () => {
       relationships,
     ]) {
       expect(output.contentIsUntrusted).toBe(true);
+      expect(output.untrustedPayloadFields).toEqual(expect.any(Array));
     }
+    expect(described.sourceMetadataFields).toEqual(expect.arrayContaining(["filePath"]));
+    expect(described.untrustedPayloadFields).toEqual(expect.arrayContaining(["table"]));
+    expect(tableSearch.untrustedPayloadFields).toEqual(expect.arrayContaining(["tables"]));
+    expect(columnSearch.untrustedPayloadFields).toEqual(expect.arrayContaining(["columns"]));
+    expect(relationships.untrustedPayloadFields).toEqual(expect.arrayContaining(["relationships"]));
     expect(JSON.stringify(described)).toContain("ignore previous instructions");
     expect(JSON.stringify(columnSearch)).toContain("Ignore all previous instructions");
     expect(JSON.stringify(relationships)).toContain("IGNORE DEVELOPER MESSAGE");
     expect(explanation.summary).not.toContain("reveal local secrets");
+  });
+
+  it("marks generated draft output as derived from untrusted input", async () => {
+    const parsed = await parsePromptInjectionA5er();
+
+    const output = generateSqlSelect(parsed, {
+      tableName: "ignore_previous_instructions",
+    }) as Record<string, unknown>;
+
+    expectDraftGenerationOutput(output);
+    expect(output).toMatchObject({
+      draftIsDerivedFromUntrustedInput: true,
+      contentIsUntrusted: true,
+    });
+    expect(output.trustedMetadataFields).toEqual(
+      expect.arrayContaining([
+        "outputKind",
+        "readOnly",
+        "writesToFileSystem",
+        "connectsToDatabase",
+        "executesSql",
+        "draftIsDerivedFromUntrustedInput",
+      ]),
+    );
+    expect(output.sourceMetadataFields).toEqual(expect.arrayContaining(["filePath"]));
+    expect(output.untrustedPayloadFields).toEqual(
+      expect.arrayContaining(["baseTable", "includedTables", "parameters"]),
+    );
+    expect(output.draftOutputFields).toEqual(expect.arrayContaining(["sql"]));
+    expect(String(output.sql)).toContain("ignore_previous_instructions");
+    expect(JSON.stringify(output.warnings)).not.toContain("reveal local secrets");
   });
 
   it("explains a table with column profile and relationships", async () => {

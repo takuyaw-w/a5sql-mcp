@@ -11,6 +11,7 @@ import type {
   LiveSchemaDocument,
   SchemaCompareIssue,
 } from "./types.js";
+import { withUntrustedPayloadContract } from "../output-contract.js";
 
 const DEFAULT_SCHEMA_COMPARE_ISSUE_LIMIT = 200;
 const MAX_SCHEMA_COMPARE_WARNINGS = 100;
@@ -53,7 +54,9 @@ export function compareA5erWithLiveSchema(
   options: CompareA5erWithLiveSchemaOptions,
 ): JsonObject {
   if (result.parsed.parseStatus !== "ok") {
-    return unrecognizedA5erResult(result, { found: false, issues: [] });
+    return withUntrustedPayloadContract(
+      unrecognizedA5erResult(result, { found: false, issues: [] }),
+    );
   }
 
   const compareDataTypes = options.compareDataTypes ?? true;
@@ -123,7 +126,7 @@ export function compareA5erWithLiveSchema(
     }
   }
 
-  return {
+  return withUntrustedPayloadContract({
     found: true,
     filePath: result.filePath,
     kind: result.kind,
@@ -147,7 +150,7 @@ export function compareA5erWithLiveSchema(
     issues: issueCollector.issues,
     nextAction:
       "live schema は既存の DB MCP などで取得し、この tool にはスナップショット JSON として渡してください。a5sql-mcp は DB へ接続しません。",
-  };
+  });
 }
 
 function buildA5erIndex(document: ParsedA5erDocument): A5erLookupIndex {

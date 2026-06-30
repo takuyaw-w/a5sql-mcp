@@ -13,6 +13,7 @@ import {
   primaryKeyColumns,
   unrecognizedA5erResult,
 } from "./a5er-output-utils.js";
+import { withUntrustedPayloadContract } from "./output-contract.js";
 import type { A5erCliResult, JsonObject } from "./types.js";
 export { compareA5erWithLiveSchema } from "./schema-compare/compare.js";
 export {
@@ -35,10 +36,7 @@ const DEFAULT_COLUMN_SEARCH_LIMIT = 100;
 const DEFAULT_SCHEMA_SUGGESTION_LIMIT = 100;
 
 function withUntrustedContentSignal(output: JsonObject): JsonObject {
-  return {
-    ...output,
-    contentIsUntrusted: true,
-  };
+  return withUntrustedPayloadContract(output);
 }
 
 export function listA5sqlRelationships(

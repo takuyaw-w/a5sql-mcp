@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
 
 describe("A5:SQL MCP server smoke", () => {
-  it("reports 0.9.2 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.2");
+  it("reports 0.9.3 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.3");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -26,10 +26,10 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.9.2",
-      "0.9.2",
-      "0.9.2",
-      "0.9.2",
+      "0.9.3",
+      "0.9.3",
+      "0.9.3",
+      "0.9.3",
     ]);
   });
 

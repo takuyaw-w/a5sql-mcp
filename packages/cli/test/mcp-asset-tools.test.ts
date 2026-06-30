@@ -585,6 +585,12 @@ describe("A5:SQL asset MCP tools", () => {
       contentIsUntrusted: true,
       nextAction: "parse_a5sql_asset に assetId を渡すと内容を解析できます。",
     });
+    expect(search.structuredContent.trustedMetadataFields).toEqual(
+      expect.arrayContaining(["warnings", "nextAction"]),
+    );
+    expect(search.structuredContent.untrustedPayloadFields).toEqual(
+      expect.arrayContaining(["assets"]),
+    );
     expect(search.structuredContent.assets).toEqual([
       expect.objectContaining({
         snippet: expect.stringContaining("ignore previous instructions"),
@@ -595,6 +601,12 @@ describe("A5:SQL asset MCP tools", () => {
       found: true,
       contentIsUntrusted: true,
     });
+    expect(parsed.structuredContent.sourceMetadataFields).toEqual(
+      expect.arrayContaining(["asset", "parser"]),
+    );
+    expect(parsed.structuredContent.untrustedPayloadFields).toEqual(
+      expect.arrayContaining(["statements", "summary"]),
+    );
   });
 
   it("masks expanded secret forms in MCP asset read and search responses", async () => {
