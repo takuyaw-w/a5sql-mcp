@@ -40,6 +40,16 @@ export type SearchAssetsOptions = {
   maxFileBytes?: number;
 };
 
+export type SearchAssetsCutoffReason = "limit_exceeded" | "max_files_reached";
+
+export type SearchAssetsResult = {
+  assets: AssetRecord[];
+  effectiveLimit: number;
+  visitedFileCount: number;
+  truncated: boolean;
+  cutoffReason: SearchAssetsCutoffReason | null;
+};
+
 export type ReadAssetOptions = {
   roots?: string[];
   assetId?: string;

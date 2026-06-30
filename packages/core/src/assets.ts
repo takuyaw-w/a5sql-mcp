@@ -11,6 +11,7 @@ import type {
   ReadAssetOptions,
   ReadAssetResult,
   SearchAssetsOptions,
+  SearchAssetsResult,
 } from "./types.js";
 
 const DEFAULT_LIMIT = 50;
@@ -36,6 +37,12 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Promise<AssetRecord[]> {
+  return (await searchA5sqlAssetsWithMetadata(options)).assets;
+}
+
+export async function searchA5sqlAssetsWithMetadata(
+  options: SearchAssetsOptions = {},
+): Promise<SearchAssetsResult> {
   const roots = await resolveReadableRoots(options.roots);
   const limit = clamp(options.limit ?? DEFAULT_LIMIT, 1, 500);
   const maxDepth = clamp(options.maxDepth ?? DEFAULT_MAX_DEPTH, 1, 32);
@@ -55,8 +62,20 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
       includeHidden: options.includeHidden ?? false,
       maxDepth,
     })) {
-      if (visitedFiles >= maxFiles || results.length >= limit) {
-        return results;
+      const cutoffReason =
+        results.length >= limit
+          ? "limit_exceeded"
+          : visitedFiles >= maxFiles
+            ? "max_files_reached"
+            : null;
+      if (cutoffReason) {
+        return {
+          assets: results,
+          effectiveLimit: limit,
+          visitedFileCount: visitedFiles,
+          truncated: true,
+          cutoffReason,
+        };
       }
       visitedFiles += 1;
 
@@ -87,7 +106,7 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
           const index = decoded.text.toLocaleLowerCase().indexOf(query);
           matched = index >= 0 || path.basename(filePath).toLocaleLowerCase().includes(query);
           if (index >= 0) {
-            snippet = makeSnippet(maskSensitiveText(decoded.text), index);
+            snippet = makeMaskedSnippet(decoded.text, index);
           }
         }
       } else if (query) {
@@ -115,18 +134,25 @@ export async function searchA5sqlAssets(options: SearchAssetsOptions = {}): Prom
     }
   }
 
-  return results;
+  return {
+    assets: results,
+    effectiveLimit: limit,
+    visitedFileCount: visitedFiles,
+    truncated: false,
+    cutoffReason: null,
+  };
 }
 
 export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAssetResult | null> {
   const maxBytes = clamp(options.maxBytes ?? DEFAULT_READ_BYTES, 1, 2 * 1024 * 1024);
   if (options.path) {
+    if (!options.roots || options.roots.length === 0) {
+      return null;
+    }
     const filePath = path.resolve(options.path);
-    if (options.roots && options.roots.length > 0) {
-      const withinRoots = await isPathWithinRoots(filePath, options.roots);
-      if (!withinRoots) {
-        return null;
-      }
+    const withinRoots = await isPathWithinRoots(filePath, options.roots);
+    if (!withinRoots) {
+      return null;
     }
     return readAssetPath(filePath, stableAssetId(filePath), maxBytes);
   }
@@ -295,8 +321,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function makeSnippet(text: string, matchIndex: number): string {
+function makeMaskedSnippet(text: string, matchIndex: number): string {
   const start = Math.max(0, matchIndex - 120);
   const end = Math.min(text.length, matchIndex + 240);
-  return text.slice(start, end).replace(/\s+/g, " ").trim();
+  return maskSensitiveText(text.slice(start, end)).replace(/\s+/g, " ").trim();
 }

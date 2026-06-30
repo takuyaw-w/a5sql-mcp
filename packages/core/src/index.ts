@@ -1,4 +1,9 @@
-export { searchA5sqlAssets, readA5sqlAsset, classifyAsset } from "./assets.js";
+export {
+  searchA5sqlAssets,
+  searchA5sqlAssetsWithMetadata,
+  readA5sqlAsset,
+  classifyAsset,
+} from "./assets.js";
 export { listA5sqlConnections, extractConnectionCandidate } from "./connections.js";
 export { detectA5sqlLocations } from "./locations.js";
 export { maskSensitiveText, maskValue } from "./mask.js";
@@ -16,6 +21,8 @@ export type {
   ReadAssetOptions,
   ReadAssetResult,
   SearchAssetsOptions,
+  SearchAssetsCutoffReason,
+  SearchAssetsResult,
 } from "./types.js";
 export type {
   ParsedA5erColumn,

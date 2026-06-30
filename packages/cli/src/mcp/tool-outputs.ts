@@ -4,6 +4,7 @@ import type {
   ParsedA5erRelationship,
   ParsedA5erTable,
 } from "@takuyaw-w/a5sql-mcp-parser";
+import { maskSensitiveText } from "@takuyaw-w/a5sql-mcp-core";
 
 import type { CliResult } from "../index.js";
 import type {
@@ -1024,7 +1025,10 @@ export function formatFullParsedFile(
   } = {},
 ): JsonObject {
   if (!isA5erParsed(result)) {
-    return result;
+    return {
+      ...result,
+      parsed: maskParsedValue(result.parsed),
+    };
   }
 
   const maxTables = options.maxTables ?? DEFAULT_PARSE_FULL_TABLE_LIMIT;
@@ -1112,7 +1116,7 @@ export function summarizeParsedFile(
     "statements" in result.parsed &&
     Array.isArray(result.parsed.statements)
   ) {
-    const statements = result.parsed.statements.slice(0, limit);
+    const statements = maskParsedValue(result.parsed.statements.slice(0, limit)) as unknown[];
     return {
       filePath: result.filePath,
       kind: result.kind,
@@ -1134,7 +1138,7 @@ export function summarizeParsedFile(
     typeof result.parsed.text === "string"
   ) {
     const maxChars = Math.min(limit * 100, 10_000);
-    const text = result.parsed.text.slice(0, maxChars);
+    const text = maskSensitiveText(result.parsed.text.slice(0, maxChars));
     return {
       filePath: result.filePath,
       kind: result.kind,
@@ -1153,8 +1157,23 @@ export function summarizeParsedFile(
     kind: result.kind,
     mode: "summary",
     fileEncoding: result.encoding,
-    parsed: result.parsed,
+    parsed: maskParsedValue(result.parsed),
   };
+}
+
+function maskParsedValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return maskSensitiveText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => maskParsedValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, maskParsedValue(item)]),
+    );
+  }
+  return value;
 }
 
 export function isRecognizedA5erParsed(result: A5erCliResult): boolean {

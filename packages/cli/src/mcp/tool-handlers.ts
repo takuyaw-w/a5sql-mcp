@@ -6,7 +6,7 @@ import {
   maskSensitiveText,
   parseA5sqlAsset,
   readA5sqlAsset,
-  searchA5sqlAssets,
+  searchA5sqlAssetsWithMetadata,
   type ParsedAssetResult,
 } from "@takuyaw-w/a5sql-mcp-core";
 
@@ -98,7 +98,7 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
   }) => {
     const limit = maxChars ?? DEFAULT_FILE_READ_MAX_CHARS;
     const decoded = await readTextFileWithMetadata(initialFile.filePath);
-    const maskedText = maskSensitiveText(decoded.text);
+    const maskedText = maskForPublicConsumption(decoded.text);
     return jsonResult(
       sliceFileText(maskedText, {
         filePath: initialFile.filePath,
@@ -157,6 +157,17 @@ export function createReadA5sqlAssetHandler() {
       });
     }
 
+    if (path && (!roots || roots.length === 0)) {
+      return jsonResult({
+        found: false,
+        code: "asset_path_requires_roots",
+        message: "path で読み取る場合は、読み取りを許可する roots を明示してください。",
+        warnings: [],
+        nextAction:
+          "roots に読み取りを許可するディレクトリを指定するか、search_a5sql_assets で得た assetId を指定してください。",
+      });
+    }
+
     const result = await readA5sqlAsset({ roots, assetId, path, maxBytes });
     if (!result) {
       return jsonResult({
@@ -170,7 +181,11 @@ export function createReadA5sqlAssetHandler() {
       });
     }
 
-    const sliced = sliceTextByChars(result.content, {
+    const sourceForMasking =
+      result.encoding === "binary_or_unsupported"
+        ? result.content
+        : (await readTextFileWithMetadata(result.asset.path)).text;
+    const sliced = sliceTextByChars(maskForPublicConsumption(result.content, sourceForMasking), {
       offsetChars,
       maxChars,
       alreadyTruncated: result.truncated,
@@ -272,6 +287,68 @@ function toPublicConnectionCandidate<T extends { sourcePath?: string }>(
   return publicConnection;
 }
 
+function maskForPublicConsumption(input: string, sourceText?: string): string {
+  const quotedJsonMasked = input.replace(
+    /(["'])(password|passwd|pass|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key)\1(\s*:\s*)(["'])([^"'"\r\n]+)\4/gi,
+    (_match, quote, key, separator, valueQuote) =>
+      `${quote}${key}${quote}${separator}${valueQuote}***${valueQuote}`,
+  );
+  const masked = maskSensitiveText(quotedJsonMasked);
+  const queryRecovered = recoverQuerySecretMasks(sourceText ?? input, masked);
+  return queryRecovered
+    .replace(
+      /(authorization)(\s*:\s*)(bearer|basic)(\s+)[^\r\n]+/gi,
+      (_match, key, separator, scheme) => `${key}${separator}${scheme} ***`,
+    )
+    .replace(
+      /\b(password|passwd|pwd|pass|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key)\s*=\s*[^;"'\r\n<> &]+/gi,
+      (_match, key) => `${key}=***`,
+    );
+}
+
+function recoverQuerySecretMasks(originalText: string, maskedText: string): string {
+  const sourceLines = originalText.split(/\r?\n/);
+  const targetLines = maskedText.split(/\r?\n/);
+
+  for (let i = 0; i < sourceLines.length; i += 1) {
+    const sourceLine = sourceLines[i];
+    const matches = [
+      ...sourceLine.matchAll(
+        /([?&;])((?:password|passwd|pwd|pass|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key)=[^&\s"'<>;]+)/gi,
+      ),
+    ];
+    if (matches.length === 0) {
+      continue;
+    }
+    const secretKeys = new Set(matches.map((match) => match[2].split("=")[0].toLowerCase()));
+    const targetLine = targetLines[i];
+    if (!targetLine) {
+      continue;
+    }
+
+    const presentKeys = new Set<string>();
+    for (const key of secretKeys) {
+      if (new RegExp(`\\b${key}=`, "i").test(targetLine)) {
+        presentKeys.add(key);
+      }
+    }
+
+    const missingKeys = [...secretKeys].filter((key) => !presentKeys.has(key));
+    if (missingKeys.length === 0) {
+      continue;
+    }
+
+    let rebuilt = targetLine;
+    for (const key of missingKeys) {
+      const prefix = rebuilt.includes("?") ? "&" : rebuilt.includes(";") ? ";" : "?";
+      rebuilt = `${rebuilt}${prefix}${key}=***`;
+    }
+    targetLines[i] = rebuilt;
+  }
+
+  return targetLines.join("\n");
+}
+
 export function createSearchA5sqlAssetsHandler() {
   return async ({
     roots,
@@ -292,8 +369,7 @@ export function createSearchA5sqlAssetsHandler() {
     maxFiles?: number;
     maxFileBytes?: number;
   }) => {
-    const effectiveLimit = limit ?? 50;
-    const assets = await searchA5sqlAssets({
+    const searchResult = await searchA5sqlAssetsWithMetadata({
       roots,
       query,
       kinds,
@@ -303,12 +379,18 @@ export function createSearchA5sqlAssetsHandler() {
       maxFiles,
       maxFileBytes,
     });
+    const { assets } = searchResult;
 
     return jsonResult({
       query: query ?? null,
       roots: roots ?? null,
+      effectiveLimit: searchResult.effectiveLimit,
       count: assets.length,
-      truncated: assets.length >= effectiveLimit,
+      returnedAssetCount: assets.length,
+      visitedFileCount: searchResult.visitedFileCount,
+      truncated: searchResult.truncated,
+      cutoffReason: searchResult.cutoffReason,
+      warnings: [],
       nextAction: "parse_a5sql_asset に assetId を渡すと内容を解析できます。",
       assets: assets.map((asset) => ({
         assetId: asset.id,

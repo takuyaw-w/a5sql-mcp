@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
 
 describe("A5:SQL MCP server smoke", () => {
-  it("reports 0.4.0 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.4.0");
+  it("reports 0.7.0 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.7.0");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -26,18 +26,20 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.4.0",
-      "0.4.0",
-      "0.4.0",
-      "0.4.0",
+      "0.7.0",
+      "0.7.0",
+      "0.7.0",
+      "0.7.0",
     ]);
   });
 
-  it("lists 0.4 tools and can call detect_a5sql_locations", async () => {
+  it("lists current tools and returns representative structuredContent contracts", async () => {
     const root = path.join(os.tmpdir(), `a5sql-mcp-smoke-${randomUUID()}`);
     const filePath = path.join(root, "schema.sql");
+    const extraFilePath = path.join(root, "extra.sql");
     await mkdir(root, { recursive: true });
     await writeFile(filePath, "select * from users;", "utf8");
+    await writeFile(extraFilePath, "select * from accounts where token='raw-token';", "utf8");
 
     const server = await createA5sqlMcpServer({ fileArg: filePath });
     const client = new Client({ name: "a5sql-mcp-test", version: "0.0.0" });
@@ -67,9 +69,40 @@ describe("A5:SQL MCP server smoke", () => {
       expect(result.structuredContent).toMatchObject({
         totalCandidateCount: 1,
         returnedCandidateCount: 1,
+        warnings: [],
+        nextAction: expect.any(String),
       });
+
+      const searchResult = await client.callTool({
+        name: "search_a5sql_assets",
+        arguments: { roots: [root], query: "accounts", kinds: ["sql"], limit: 1 },
+      });
+
+      expect(searchResult.structuredContent).toMatchObject({
+        effectiveLimit: 1,
+        returnedAssetCount: 1,
+        truncated: true,
+        cutoffReason: "limit_exceeded",
+        warnings: expect.any(Array),
+        nextAction: expect.any(String),
+      });
+      expect(JSON.stringify(searchResult.structuredContent)).not.toContain("raw-token");
+
+      const readResult = await client.callTool({
+        name: "read_a5sql_asset",
+        arguments: { roots: [root], path: extraFilePath, maxChars: 200 },
+      });
+
+      expect(readResult.structuredContent).toMatchObject({
+        found: true,
+        truncated: false,
+        warnings: [],
+        nextAction: expect.any(String),
+      });
+      expect(JSON.stringify(readResult.structuredContent)).not.toContain("raw-token");
     } finally {
       await Promise.allSettled([client.close(), server.close()]);
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

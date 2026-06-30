@@ -104,6 +104,24 @@ claude mcp add --transport stdio --scope user a5sql -- npx -y @takuyaw-w/a5sql-m
 
 Claude Code のセッション内では `/mcp` で接続状態を確認できます。
 
+## roots の最小権限設定
+
+`A5SQL_MCP_ROOTS` は asset 探索・asset 読み取り・接続候補確認で使う root です。`parse_a5sql_asset` でも同じ root 制約を使います。指定した root 配下のファイル名、パス、抜粋が MCP レスポンスに含まれ得るため、必要な最小範囲だけを指定してください。
+
+推奨する指定例:
+
+- A5:SQL の設定ディレクトリだけ
+- 保存済み SQL を置いたディレクトリだけ
+- 対象プロジェクトの ER 図や SQL を置いた作業ディレクトリだけ
+
+避ける指定例:
+
+- ホームディレクトリ全体
+- ドライブ全体
+- 複数プロジェクトを含む親ディレクトリ
+
+この MCP サーバーはパスワード、トークン、秘密鍵、接続文字列をマスクしますが、root を広げるほどファイル名やディレクトリ構成などのローカル情報も探索対象に入ります。まず狭い root で起動し、必要になった範囲だけ追加してください。
+
 ## プロンプト例
 
 MCP クライアント側では、自然文で依頼すれば必要な tool が呼び出されます。tool 呼び出し自体を検証したい場合は、tool 名を明示すると挙動を確認しやすくなります。
@@ -163,6 +181,14 @@ a5sql の review_a5sql_schema を使って、NULL 許容、主キー、外部キ
 ```
 
 この MCP サーバーはローカルファイルを読み取るだけで、接続先 DB へ SQL を実行しません。生成された SQL やモデルコードは、実際の DB 方言やアプリケーション規約に合わせて確認してから利用してください。
+
+## DB 接続と SQL 実行について
+
+1.0.0 までのスコープでは、実際の接続先 DB への接続、SQL 実行、資格情報の復号・表示は行いません。
+
+`generate_sql_select`、`generate_migration_plan`、`compare_a5er_with_live_schema` は、A5:ER 定義や外部から渡された JSON をもとに案や差分を生成するだけです。この MCP サーバー自身が DB に接続して検査したり、生成した SQL を実行したりすることはありません。
+
+将来 DB 実行機能を追加する場合は、読み取り専用クエリ、明示的な許可、監査ログ、タイムアウト、件数制限を別設計で必須条件にします。
 
 ---
 
@@ -283,6 +309,10 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 
 ## 公開する MCP tool
 
+現在の MCP tool は、読み取り専用の安定 tool と、設計・実装のたたき台を返す生成補助 tool を分けて扱います。どちらも A5:SQL の設定ファイルや ER 図ファイルには書き込まず、接続先 DB へ SQL を実行しません。
+
+### 安定 read-only tool
+
 - `describe_a5sql_file`: 起動時に指定されたファイルのパス、種別、サイズ、更新日時を返します。
 - `parse_a5sql_file`: 起動時に指定された `.a5er` / `.sql` ファイルを AI 向けの構造に変換します。デフォルトは `summary` で件数と代表要素だけを返します。`mode: "full"` でも `maxTables` / `maxRelationships` / `maxColumnsPerTable` による上限つきで返します。
 - `read_a5sql_file`: 起動時に指定されたファイル本文を、最大文字数つきで返します。`offsetChars` による文字位置指定、または `startLine` / `maxLines` による行範囲指定ができます。
@@ -297,6 +327,11 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - `list_a5sql_relationships`: `.a5er` ファイル内のリレーション一覧を返します。任意でテーブル名により絞り込めます。
 - `find_a5sql_tables`: `.a5er` ファイル内のテーブルを、テーブル名・論理名・コメント・カラム名から検索します。
 - `find_a5sql_columns`: `.a5er` ファイル内のカラムを、カラム名・論理名・コメント・型・テーブル名から検索します。
+
+### 生成補助 tool
+
+生成補助 tool は、AI や人間がレビューするための案を返します。ファイルシステムへの書き込み、DB への接続、SQL の実行、migration の適用は行いません。
+
 - `generate_sql_select`: `.a5er` ファイル内の定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。関連テーブルの JOIN は `maxRelatedTables` で上限を指定できます。
 - `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成します。`maxTables` で出力対象テーブル数を制限できます。
 - `generate_model_files`: `.a5er` ファイル内のテーブル定義から Laravel Eloquent または SQLAlchemy のモデルファイル案を生成します。ファイルシステムには書き込みません。`maxTables` で生成対象テーブル数を制限できます。
@@ -306,14 +341,21 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 - `compare_a5er_with_live_schema`: `.a5er` ファイル内の定義と、外部 DB MCP などから渡された live schema JSON を比較します。DB には接続せず、テーブル/カラム欠落、余剰、型、NULL 許容、主キー差分を返します。
 - `generate_migration_plan`: `.a5er` ファイル内の定義と live schema JSON の差分から migration 案を生成します。DB には接続せず、実行もしません。
 
-大きな `.a5er` ファイルでは、tool は `truncated`, `hasMore`, `total...Count` などのメタデータを返します。必要な範囲を `offset` / `limit`、`tableNames`、`maxTables` などで絞り込んでから詳細 tool を使う想定です。
+大きな `.a5er` ファイルや asset 一覧では、tool は `truncated`, `hasMore`, `total...Count`, `returned...Count`, `warnings`, `nextAction` などのメタデータを返します。`search_a5sql_assets` は `effectiveLimit` と `cutoffReason` も返します。必要な範囲を `offset` / `limit`、`tableNames`、`maxTables`、`roots` などで絞り込んでから詳細 tool を使う想定です。
 
-`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。`unrecognized` の場合は、まず `read_a5sql_file` で先頭行と文字コードを確認してください。
+0.6.0 では、実ファイル耐性を上げるために `.a5er` の variant fixture と SQL split の quote / comment 処理を強化しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。
+
+`unrecognized` の場合は、空の正常スキーマとして扱わず、まず `read_a5sql_file` または `read_a5sql_asset` で先頭行、拡張子、文字コードを確認してください。A5:ER では `View`、`Index`、`Position`、`PageInfo`、`DomainInfo`、`CommonField` など、存在する optional 情報だけを構造化します。未知セクションは無視しますが、table や relationship として成立しない section は warning で返します。
 
 主な warning は次のとおりです。
 
 - `a5er_structure_not_recognized`: A5:ER らしい構造を検出できません。対象ファイル、文字コード、拡張子を確認してください。
-- `a5er_encoding_mismatch:<declared>:<decoded>`: A5:ER ヘッダーの `ENCODING` と実際に読み取った文字コードが一致していません。文字化けや誤ったファイル指定の可能性があります。
+- `a5er_encoding_mismatch:<declared>:<decoded>`: A5:ER ヘッダーの `ENCODING` と実際に読み取った文字コードが一致していません。文字化け、誤ったファイル指定、ヘッダーと保存形式の不一致の可能性があります。
+- `manager_section_not_found`: A5:ER として認識できましたが `[Manager]` section がありません。古い形式、切り出し済み fixture、または不完全なファイルの可能性があります。
+- `table_missing_name:<section>`: `Entity` / `View` section に物理名と論理名がありません。該当 section は table 一覧に含めません。
+- `relationship_missing_entities:<name>`: relationship section に接続元/接続先 entity がありません。該当 relationship は一覧に含めません。
+
+SQL asset の解析は heuristic です。0.6.0 では single quote、double quote、backtick、line comment、block comment、PostgreSQL dollar quote 内の semicolon を statement delimiter として扱わないようにしています。ただし SQL 方言ごとの完全な構文解析ではないため、実行前レビュー用の要約として扱ってください。
 
 大きなER図を読むときは、`parse_a5sql_file` の `summary` で件数と `parseStatus` を確認し、`find_a5sql_tables` / `list_a5sql_tables` で対象を絞り、最後に `describe_a5sql_table` や生成系 tool を呼び出す流れを推奨します。
 

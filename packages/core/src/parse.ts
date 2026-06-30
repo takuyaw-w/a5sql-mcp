@@ -15,7 +15,7 @@ export async function parseA5sqlAsset(
   }
 
   if (read.asset.kind === "er" || read.asset.fileName.toLocaleLowerCase().endsWith(".a5er")) {
-    const parsed = parseA5erIni(read.content);
+    const parsed = parseA5erIni(read.content, { fileEncoding: read.encoding });
     return {
       asset: read.asset,
       parser: "a5er-ini-v19",

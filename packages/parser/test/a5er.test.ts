@@ -200,4 +200,88 @@ describe("parseA5erIni", () => {
     expect(parsed.warnings).toContain("manager_section_not_found");
     expect(parsed.tables[0]?.name).toBe("headerless");
   });
+
+  it("keeps optional A5ER manager and diagram metadata structured", () => {
+    const parsed = parseA5erIni(`
+      # A5:ER FORMAT:19
+      # A5:ER ENCODING:UTF8
+
+      [Manager]
+      ProjectName="Variant"
+      PageInfo="MAIN",3,"A4Landscape",$FFFFFF
+      PageInfo="DETAIL",1,"A4Portrait",$EEEEEE
+      DomainInfo="Code","varchar(20)","NOT NULL"
+      CommonField="更新日時","updated_at","timestamp","NOT NULL",,,"更新日時",$FFFFFFFF,""
+      UnknownManagerKey="kept as scalar"
+
+      [UnknownSection]
+      Value=this section should not produce a warning
+
+      [View]
+      PName=active_users
+      LName=有効ユーザー
+      Field="ユーザーID","user_id","Integer","NOT NULL",,,"",$FFFFFFFF,""
+      Index=active_users_ix1=1,user_id
+      Position="MAIN",100,200,300,180
+    `);
+
+    expect(parsed.parseStatus).toBe("ok");
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.manager.ProjectName).toBe("Variant");
+    expect(parsed.manager.UnknownManagerKey).toBe("kept as scalar");
+    expect(parsed.manager.PageInfo).toEqual([
+      ["MAIN", 3, "A4Landscape", "$FFFFFF"],
+      ["DETAIL", 1, "A4Portrait", "$EEEEEE"],
+    ]);
+    expect(parsed.manager.DomainInfo).toEqual([["Code", "varchar(20)", "NOT NULL"]]);
+    expect(parsed.manager.CommonField).toEqual([
+      ["更新日時", "updated_at", "timestamp", "NOT NULL", "", "", "更新日時", "$FFFFFFFF", ""],
+    ]);
+    expect(parsed.tables[0]).toEqual(
+      expect.objectContaining({
+        objectType: "view",
+        name: "active_users",
+        logicalName: "有効ユーザー",
+      }),
+    );
+    expect(parsed.tables[0]?.indexes[0]).toEqual({
+      name: "active_users_ix1",
+      unique: true,
+      uniqueType: 1,
+      columns: ["user_id"],
+    });
+    expect(parsed.tables[0]?.positions[0]).toEqual({
+      page: "MAIN",
+      x: 100,
+      y: 200,
+      width: 300,
+      height: 180,
+    });
+  });
+
+  it("warns for malformed entity and relationship sections without treating unknown sections as schema", () => {
+    const parsed = parseA5erIni(`
+      # A5:ER FORMAT:19
+
+      [Manager]
+      ProjectName="Malformed"
+
+      [Entity]
+      Comment=entity without PName or LName
+
+      [Relationship]
+      PName=missing_entities
+
+      [Memo]
+      Body=this is not a table
+    `);
+
+    expect(parsed.parseStatus).toBe("ok");
+    expect(parsed.tables).toEqual([]);
+    expect(parsed.relationships).toEqual([]);
+    expect(parsed.warnings).toEqual([
+      "table_missing_name:Entity",
+      "relationship_missing_entities:missing_entities",
+    ]);
+  });
 });

@@ -20,13 +20,86 @@ function splitSqlStatements(text: string): string[] {
   const statements: string[] = [];
   let current = "";
   let quote: "'" | '"' | "`" | null = null;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let dollarQuoteTag: string | null = null;
 
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
-    const previous = text[index - 1];
-    if ((char === "'" || char === '"' || char === "`") && previous !== "\\") {
-      quote = quote === char ? null : (quote ?? char);
+    const next = text[index + 1];
+
+    if (dollarQuoteTag) {
+      if (text.startsWith(dollarQuoteTag, index)) {
+        current += dollarQuoteTag;
+        index += dollarQuoteTag.length - 1;
+        dollarQuoteTag = null;
+      } else {
+        current += char;
+      }
+      continue;
     }
+
+    if (inLineComment) {
+      current += char;
+      if (char === "\n" || char === "\r") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      current += char;
+      if (char === "*" && next === "/") {
+        current += next;
+        index += 1;
+        inBlockComment = false;
+      }
+      continue;
+    }
+
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        if (next === quote) {
+          current += next;
+          index += 1;
+          continue;
+        }
+        if (!isBackslashEscaped(text, index)) {
+          quote = null;
+        }
+      }
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      current += char + next;
+      index += 1;
+      inLineComment = true;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      current += char + next;
+      index += 1;
+      inBlockComment = true;
+      continue;
+    }
+
+    const dollarQuoteMatch = text.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+    if (dollarQuoteMatch?.[0]) {
+      dollarQuoteTag = dollarQuoteMatch[0];
+      current += dollarQuoteTag;
+      index += dollarQuoteTag.length - 1;
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      current += char;
+      continue;
+    }
+
     if (char === ";" && quote === null) {
       if (current.trim()) {
         statements.push(current.trim());
@@ -34,12 +107,21 @@ function splitSqlStatements(text: string): string[] {
       current = "";
       continue;
     }
+
     current += char;
   }
   if (current.trim()) {
     statements.push(current.trim());
   }
   return statements;
+}
+
+function isBackslashEscaped(text: string, quoteIndex: number): boolean {
+  let slashCount = 0;
+  for (let index = quoteIndex - 1; text[index] === "\\"; index -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function detectOperation(statement: string): string {

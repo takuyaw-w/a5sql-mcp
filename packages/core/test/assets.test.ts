@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { readA5sqlAsset, searchA5sqlAssets } from "../src/assets.js";
+import { readA5sqlAsset, searchA5sqlAssets, searchA5sqlAssetsWithMetadata } from "../src/assets.js";
 
 describe("A5:SQL asset search", () => {
   it("finds sql assets and masks snippets/read contents", async () => {
@@ -64,6 +64,94 @@ describe("A5:SQL asset search", () => {
     );
   });
 
+  it("masks expanded secret forms in asset snippets and read contents", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "expanded-secrets.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(
+      sqlPath,
+      [
+        "-- expanded secret forms",
+        'select \'{"password":"json-password","api_key":"json-api-key"}\' as payload;',
+        "Authorization: Bearer raw-bearer-token",
+        "jdbc:postgresql://localhost/app?user=alice&password=query-password&token=query-token",
+        "Driver=PostgreSQL;Server=localhost;User ID=alice;Pwd=odbc-password;Database=app",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const assets = await searchA5sqlAssets({ roots: [root], query: "expanded" });
+    expect(assets).toHaveLength(1);
+    const read = await readA5sqlAsset({ roots: [root], assetId: assets[0]!.id });
+    expect(read).not.toBeNull();
+    expect(read?.content).toContain('"password":"***"');
+    expect(read?.content).toContain('"api_key":"***"');
+    expect(read?.content).toContain("Authorization: Bearer ***");
+    expect(read?.content).toContain("password=***");
+    expect(read?.content).toContain("token=***");
+    expect(read?.content).toContain("Pwd=***");
+    expect(read?.content).not.toContain("json-password");
+    expect(read?.content).not.toContain("json-api-key");
+    expect(read?.content).not.toContain("raw-bearer-token");
+    expect(read?.content).not.toContain("query-password");
+    expect(read?.content).not.toContain("query-token");
+    expect(read?.content).not.toContain("odbc-password");
+
+    expect(assets[0]?.snippet).toBeTruthy();
+    expect(assets[0]?.snippet).toContain('"password":"***"');
+    expect(assets[0]?.snippet).toContain('"api_key":"***"');
+    expect(assets[0]?.snippet).toContain("Authorization: Bearer ***");
+    expect(assets[0]?.snippet).not.toContain("json-password");
+    expect(assets[0]?.snippet).not.toContain("json-api-key");
+
+    const authAssets = await searchA5sqlAssets({ roots: [root], query: "Authorization" });
+    expect(authAssets).toHaveLength(1);
+    expect(authAssets[0]?.snippet).toContain("Authorization: Bearer ***");
+    expect(authAssets[0]?.snippet).not.toContain("raw-bearer-token");
+
+    const jdbcAssets = await searchA5sqlAssets({ roots: [root], query: "query-password" });
+    expect(jdbcAssets).toHaveLength(1);
+    expect(jdbcAssets[0]?.snippet).toContain("password=***");
+    expect(jdbcAssets[0]?.snippet).toContain("token=***");
+    expect(jdbcAssets[0]?.snippet).not.toContain("query-password");
+    expect(jdbcAssets[0]?.snippet).not.toContain("query-token");
+
+    const odbcAssets = await searchA5sqlAssets({ roots: [root], query: "odbc-password" });
+    expect(odbcAssets).toHaveLength(1);
+    expect(odbcAssets[0]?.snippet).toContain("Pwd=***");
+    expect(odbcAssets[0]?.snippet).not.toContain("odbc-password");
+  });
+
+  it("masks private key material when asset reads are truncated", async () => {
+    const root = await makeTempDir();
+    const keyPath = path.join(root, "keys", "private-key.txt");
+    await mkdir(path.dirname(keyPath), { recursive: true });
+    await writeFile(
+      keyPath,
+      [
+        "-----BEGIN PRIVATE KEY-----",
+        "raw-private-key-material-that-would-otherwise-leak",
+        "-----END PRIVATE KEY-----",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const assets = await searchA5sqlAssets({ roots: [root], query: "PRIVATE KEY" });
+    expect(assets).toHaveLength(1);
+    const read = await readA5sqlAsset({
+      roots: [root],
+      assetId: assets[0]!.id,
+      maxBytes: 50,
+    });
+
+    expect(read).not.toBeNull();
+    expect(read?.truncated).toBe(true);
+    expect(read?.content).toContain("-----BEGIN PRIVATE KEY-----");
+    expect(read?.content).toContain("***");
+    expect(read?.content).not.toContain("raw-private-key");
+    expect(read?.content).not.toContain("material-that-would-otherwise-leak");
+  });
+
   it("does not return content for binary or unsupported assets", async () => {
     const root = await makeTempDir();
     const sqlitePath = path.join(root, "cache.sqlite");
@@ -94,6 +182,52 @@ describe("A5:SQL asset search", () => {
       truncated: false,
       warnings: ["binary_file_not_returned"],
     });
+  });
+
+  it("does not decode tiny odd-position NUL buffers as UTF-16LE text", async () => {
+    const root = await makeTempDir();
+    try {
+      const sqlPath = path.join(root, "tiny-binary.sql");
+      await writeFile(sqlPath, Buffer.from([0x01, 0x00, 0x02, 0x03]));
+
+      const read = await readA5sqlAsset({ roots: [root], path: sqlPath });
+
+      expect(read).not.toBeNull();
+      expect(read?.encoding).toBe("binary");
+      expect(read?.content).toBe("");
+      expect(read?.warnings).toContain("binary_file_not_returned");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses explicit path reads without roots", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "personal-note.sql");
+    await writeFile(sqlPath, "select 'local personal marker' as memo;", "utf8");
+
+    await expect(readA5sqlAsset({ path: sqlPath })).resolves.toBeNull();
+  });
+
+  it("reports when search stops because maxFiles is reached", async () => {
+    const root = await makeTempDir();
+    await writeFile(path.join(root, "first.sql"), "select * from users;", "utf8");
+    await writeFile(path.join(root, "second.sql"), "select * from accounts;", "utf8");
+
+    const result = await searchA5sqlAssetsWithMetadata({
+      roots: [root],
+      kinds: ["sql"],
+      limit: 10,
+      maxFiles: 1,
+    });
+
+    expect(result).toMatchObject({
+      effectiveLimit: 10,
+      visitedFileCount: 1,
+      truncated: true,
+      cutoffReason: "max_files_reached",
+    });
+    expect(result.assets).toHaveLength(1);
   });
 });
 

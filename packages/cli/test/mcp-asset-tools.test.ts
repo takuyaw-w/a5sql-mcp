@@ -6,7 +6,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { parseFile } from "../src/index.js";
-import { createReadA5sqlFileHandler } from "../src/mcp/tool-handlers.js";
+import {
+  createParseA5sqlFileHandler,
+  createReadA5sqlFileHandler,
+} from "../src/mcp/tool-handlers.js";
 
 describe("A5:SQL asset MCP tools", () => {
   it("masks secrets when reading the configured file", async () => {
@@ -19,6 +22,9 @@ describe("A5:SQL asset MCP tools", () => {
         "select * from users where password='raw-password';",
         "token: raw-token",
         "api_key=raw-api-key",
+        'select \'{"password":"json-password","api_key":"json-api-key"}\' as payload;',
+        "Authorization: Bearer raw-bearer-token",
+        "jdbc:postgresql://localhost/app?user=alice&password=query-password&token=query-token",
       ].join("\n"),
       "utf8",
     );
@@ -29,9 +35,80 @@ describe("A5:SQL asset MCP tools", () => {
     expect(result.structuredContent.text).toContain("password='***'");
     expect(result.structuredContent.text).toContain("token: ***");
     expect(result.structuredContent.text).toContain("api_key=***");
+    expect(result.structuredContent.text).toContain('"password":"***"');
+    expect(result.structuredContent.text).toContain('"api_key":"***"');
+    expect(result.structuredContent.text).toContain("Authorization: Bearer ***");
+    expect(result.structuredContent.text).toContain("password=***");
+    expect(result.structuredContent.text).toContain("token=***");
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-password");
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-token");
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-api-key");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("json-password");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("json-api-key");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-bearer-token");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("query-password");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("query-token");
+  });
+
+  it("masks secrets when parsing the configured sql file", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "parse-credentials.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(
+      sqlPath,
+      [
+        "select * from users where password='raw-password';",
+        "token: raw-token;",
+        "select 'Authorization: Bearer raw-bearer-token' as auth;",
+        "select 'jdbc:postgresql://localhost/app?user=alice&password=query-password&token=query-token' as url;",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const parsed = await parseFile(sqlPath);
+    const parse = createParseA5sqlFileHandler(async () => parsed);
+    const summary = await parse({});
+    const full = await parse({ mode: "full" });
+    const serialized = JSON.stringify({ summary, full });
+
+    expect(serialized).toContain("password='***'");
+    expect(serialized).toContain("token: ***");
+    expect(serialized).toContain("Authorization: Bearer ***");
+    expect(serialized).toContain("password=***");
+    expect(serialized).toContain("token=***");
+    expect(serialized).not.toContain("raw-password");
+    expect(serialized).not.toContain("raw-token");
+    expect(serialized).not.toContain("raw-bearer-token");
+    expect(serialized).not.toContain("query-password");
+    expect(serialized).not.toContain("query-token");
+  });
+
+  it("masks secrets when parsing the configured text file", async () => {
+    const root = await makeTempDir();
+    const textPath = path.join(root, "notes", "secrets.txt");
+    await mkdir(path.dirname(textPath), { recursive: true });
+    await writeFile(
+      textPath,
+      [
+        "API_KEY=text-api-key",
+        "-----BEGIN PRIVATE KEY-----",
+        "raw-private-key-material",
+        "-----END PRIVATE KEY-----",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const parsed = await parseFile(textPath);
+    const parse = createParseA5sqlFileHandler(async () => parsed);
+    const summary = await parse({});
+    const full = await parse({ mode: "full" });
+    const serialized = JSON.stringify({ summary, full });
+
+    expect(serialized).toContain("API_KEY=***");
+    expect(serialized).toContain("-----BEGIN PRIVATE KEY-----");
+    expect(serialized).toContain("***");
+    expect(serialized).not.toContain("text-api-key");
+    expect(serialized).not.toContain("raw-private-key-material");
   });
 
   it("detects A5:SQL locations from explicit roots", async () => {
@@ -138,6 +215,27 @@ describe("A5:SQL asset MCP tools", () => {
     );
   });
 
+  it("refuses explicit path reads without roots and does not leak local content or paths", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "personal-note.sql");
+    const uniqueContent = `Personal note for Takuya local profile ${randomUUID()}`;
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(sqlPath, `select '${uniqueContent}' as memo;`, "utf8");
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({ path: sqlPath });
+    const serialized = JSON.stringify(result.structuredContent);
+
+    expect(result.structuredContent).toMatchObject({
+      found: false,
+      code: "asset_path_requires_roots",
+      warnings: [],
+    });
+    expect(serialized).not.toContain(uniqueContent);
+    expect(serialized).not.toContain(sqlPath);
+    expect(serialized).not.toContain(root);
+  });
+
   it("rejects ambiguous or missing read asset selectors", async () => {
     const root = await makeTempDir();
     const sqlPath = path.join(root, "queries", "ambiguous.sql");
@@ -166,7 +264,8 @@ describe("A5:SQL asset MCP tools", () => {
     const root = await makeTempDir();
     const outsideRoot = await makeTempDir();
     const sqlPath = path.join(outsideRoot, "outside.sql");
-    await writeFile(sqlPath, "select * from secrets;", "utf8");
+    const uniqueSecret = `outside-secret-${randomUUID()}`;
+    await writeFile(sqlPath, `select * from secrets where token='${uniqueSecret}';`, "utf8");
 
     const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
     const result = await createReadA5sqlAssetHandler!()({
@@ -178,7 +277,35 @@ describe("A5:SQL asset MCP tools", () => {
       found: false,
       code: "asset_not_found",
     });
-    expect(JSON.stringify(result.structuredContent)).not.toContain("select * from secrets");
+    const serialized = JSON.stringify(result.structuredContent);
+    expect(serialized).not.toContain("select * from secrets");
+    expect(serialized).not.toContain(uniqueSecret);
+    expect(serialized).not.toContain(sqlPath);
+    expect(serialized).not.toContain(outsideRoot);
+  });
+
+  it("does not leak roots or content when asset ID is missing", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "contains-secret.sql");
+    const uniqueSecret = `missing-asset-secret-${randomUUID()}`;
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(sqlPath, `select '${uniqueSecret}' as token;`, "utf8");
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      assetId: "does-not-exist",
+    });
+    const serialized = JSON.stringify(result.structuredContent);
+
+    expect(result.structuredContent).toMatchObject({
+      found: false,
+      assetId: "does-not-exist",
+      code: "asset_not_found",
+    });
+    expect(serialized).not.toContain(uniqueSecret);
+    expect(serialized).not.toContain(sqlPath);
+    expect(serialized).not.toContain(root);
   });
 
   it("does not follow explicit path symlinks outside provided roots", async () => {
@@ -199,8 +326,12 @@ describe("A5:SQL asset MCP tools", () => {
       found: false,
       code: "asset_not_found",
     });
-    expect(JSON.stringify(result.structuredContent)).not.toContain("select * from secrets");
-    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-token");
+    const serialized = JSON.stringify(result.structuredContent);
+    expect(serialized).not.toContain("select * from secrets");
+    expect(serialized).not.toContain("raw-token");
+    expect(serialized).not.toContain(symlinkPath);
+    expect(serialized).not.toContain(outsidePath);
+    expect(serialized).not.toContain(outsideRoot);
   });
 
   it("returns no content and a warning for unsupported binary asset reads", async () => {
@@ -284,6 +415,8 @@ describe("A5:SQL asset MCP tools", () => {
         "User=alice",
         "Password=raw-password",
         "DATABASE_URL=postgres://alice:raw-password@localhost/app",
+        "Authorization: Bearer raw-bearer-token",
+        "ODBC_CONNECTION_STRING=Driver=PostgreSQL;Server=localhost;User ID=alice;Pwd=odbc-password;Database=app",
       ].join("\n"),
       "utf8",
     );
@@ -308,8 +441,14 @@ describe("A5:SQL asset MCP tools", () => {
     ]);
     expect(result.structuredContent.connections[0]).not.toHaveProperty("sourcePath");
     expect(serialized).not.toContain(root);
+    expect(serialized).not.toContain(configPath);
     expect(serialized).not.toContain("raw-password");
+    expect(serialized).not.toContain("raw-bearer-token");
+    expect(serialized).not.toContain("odbc-password");
     expect(serialized).not.toContain("postgres://alice:raw-password@localhost/app");
+    expect(serialized).not.toContain(
+      "Driver=PostgreSQL;Server=localhost;User ID=alice;Pwd=odbc-password;Database=app",
+    );
   });
 
   it("parses a discovered SQL asset by asset ID", async () => {
@@ -388,26 +527,108 @@ describe("A5:SQL asset MCP tools", () => {
     expect(JSON.stringify(result.structuredContent)).not.toContain("raw-token");
   });
 
+  it("masks expanded secret forms in MCP asset read and search responses", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "expanded-secrets.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(
+      sqlPath,
+      [
+        "-- expanded secret forms",
+        'select \'{"password":"json-password","api_key":"json-api-key"}\' as payload;',
+        "Authorization: Bearer raw-bearer-token",
+        "jdbc:postgresql://localhost/app?user=alice&password=query-password&token=query-token",
+        "Driver=PostgreSQL;Server=localhost;User ID=alice;Pwd=odbc-password;Database=app",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { createReadA5sqlAssetHandler, createSearchA5sqlAssetsHandler } =
+      await loadAssetHandlers();
+
+    const search = await createSearchA5sqlAssetsHandler!()({
+      roots: [root],
+      query: "expanded",
+      kinds: ["sql"],
+    });
+    const read = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      path: sqlPath,
+      maxChars: 1000,
+    });
+
+    expect(search.structuredContent.assets).toHaveLength(1);
+    const snippet = search.structuredContent.assets[0]?.snippet ?? "";
+    expect(snippet).toContain('"password":"***"');
+    expect(snippet).toContain('"api_key":"***"');
+    expect(snippet).toContain("Authorization: Bearer ***");
+    expect(snippet).not.toContain("json-password");
+    expect(snippet).not.toContain("json-api-key");
+    expect(snippet).not.toContain("raw-bearer-token");
+
+    const querySearch = await createSearchA5sqlAssetsHandler!()({
+      roots: [root],
+      query: "query-password",
+      kinds: ["sql"],
+    });
+    expect(querySearch.structuredContent.assets).toHaveLength(1);
+    const querySnippet = querySearch.structuredContent.assets[0]?.snippet ?? "";
+    expect(querySnippet).toContain("password=***");
+    expect(querySnippet).toContain("token=***");
+    expect(querySnippet).not.toContain("query-password");
+    expect(querySnippet).not.toContain("query-token");
+
+    const odbcSearch = await createSearchA5sqlAssetsHandler!()({
+      roots: [root],
+      query: "odbc-password",
+      kinds: ["sql"],
+    });
+    expect(odbcSearch.structuredContent.assets).toHaveLength(1);
+    const odbcSnippet = odbcSearch.structuredContent.assets[0]?.snippet ?? "";
+    expect(odbcSnippet).toContain("Pwd=***");
+    expect(odbcSnippet).not.toContain("odbc-password");
+
+    expect(read.structuredContent.content).toContain('"password":"***"');
+    expect(read.structuredContent.content).toContain('"api_key":"***"');
+    expect(read.structuredContent.content).toContain("Authorization: Bearer ***");
+    expect(read.structuredContent.content).toContain("password=***");
+    expect(read.structuredContent.content).toContain("token=***");
+    expect(read.structuredContent.content).toContain("Pwd=***");
+    expect(read.structuredContent.content).not.toContain("json-password");
+    expect(read.structuredContent.content).not.toContain("json-api-key");
+    expect(read.structuredContent.content).not.toContain("raw-bearer-token");
+    expect(read.structuredContent.content).not.toContain("query-password");
+    expect(read.structuredContent.content).not.toContain("query-token");
+    expect(read.structuredContent.content).not.toContain("odbc-password");
+  });
+
   it("marks search output as truncated when the limit is reached", async () => {
     const root = await makeTempDir();
     const firstPath = path.join(root, "queries", "first.sql");
     const secondPath = path.join(root, "queries", "second.sql");
+    const thirdPath = path.join(root, "queries", "third.sql");
     await mkdir(path.dirname(firstPath), { recursive: true });
     await writeFile(firstPath, "select * from users;", "utf8");
     await writeFile(secondPath, "select * from accounts;", "utf8");
+    await writeFile(thirdPath, "select * from orders;", "utf8");
 
     const { createSearchA5sqlAssetsHandler } = await loadAssetHandlers();
     const result = await createSearchA5sqlAssetsHandler!()({
       roots: [root],
       kinds: ["sql"],
-      limit: 1,
+      limit: 2,
     });
 
     expect(result.structuredContent).toMatchObject({
-      count: 1,
+      effectiveLimit: 2,
+      returnedAssetCount: 2,
+      count: 2,
       truncated: true,
+      cutoffReason: "limit_exceeded",
+      warnings: expect.any(Array),
+      nextAction: expect.any(String),
     });
-    expect(result.structuredContent.assets).toHaveLength(1);
+    expect(result.structuredContent.assets).toHaveLength(2);
   });
 
   it("marks search output as truncated when the default limit is reached", async () => {

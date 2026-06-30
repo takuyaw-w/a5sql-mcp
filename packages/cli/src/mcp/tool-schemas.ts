@@ -92,7 +92,9 @@ export const readA5sqlAssetInputSchema = {
     .string()
     .min(1)
     .optional()
-    .describe("明示的に読み取る asset path。roots 指定時はその root 配下だけを読み取ります。"),
+    .describe(
+      "明示的に読み取る asset path。path で読む場合は roots が必須で、その root 配下だけを読み取ります。",
+    ),
   roots: z
     .array(z.string().min(1))
     .max(20)
