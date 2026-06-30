@@ -72,6 +72,16 @@ describe("parseSqlStatements", () => {
     expect(statements[1]?.referencedTables).toEqual(["audit_logs"]);
   });
 
+  it("does not extract referenced tables from double-quoted or backtick-quoted text", () => {
+    const statements = parseSqlStatements(
+      'select "from credentials" as label, `join private_keys` as ident from users;',
+    );
+
+    expect(statements).toHaveLength(1);
+    expect(statements[0]?.operation).toBe("select");
+    expect(statements[0]?.referencedTables).toEqual(["users"]);
+  });
+
   it("keeps a broken quoted SQL fragment bounded and non-crashing", () => {
     const statements = parseSqlStatements(`
       select * from users where note = 'unterminated; select * from secrets;

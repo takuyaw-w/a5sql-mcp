@@ -134,7 +134,7 @@ function detectOperation(statement: string): string {
 
 function stripSqlNonCodeText(statement: string): string {
   let stripped = "";
-  let quote: "'" | null = null;
+  let quote: "'" | '"' | "`" | null = null;
   let inLineComment = false;
   let inBlockComment = false;
   let dollarQuoteTag: string | null = null;
@@ -209,7 +209,7 @@ function stripSqlNonCodeText(statement: string): string {
       continue;
     }
 
-    if (char === "'") {
+    if (char === "'" || char === '"' || char === "`") {
       quote = char;
       stripped += " ";
       continue;
