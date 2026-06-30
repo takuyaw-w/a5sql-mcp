@@ -125,5 +125,7 @@ export function maskValue(value: string | undefined, reveal: boolean): string | 
 }
 
 export function hasSecretLikeKey(key: string): boolean {
-  return /password|passwd|pwd|pass|secret|token|api[_-]?key|private[_-]?key/i.test(key);
+  return /password|passwd|pwd|pass|secret|token|api[_-]?key|private[_-]?key|database[_-]?url|databaseurl|jdbc[_-]?url|jdbcurl|odbc[_-]?connection[_-]?string|odbcconnectionstring|connection[_-]?string|connectionstring|conn[_-]?string|connstring|connect[_-]?string|connectstring|dsn/i.test(
+    key,
+  );
 }

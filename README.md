@@ -281,7 +281,9 @@ pnpm pack:check
 
 ## 開発者向けリリース確認
 
-0.9.3 のリリース候補として、通常の検証に加えて package として install した後の MCP 起動まで確認します。
+0.9.4 のリリース候補として、通常の検証に加えて package として install した後の MCP 起動まで確認します。
+
+0.9.4 では、秘密情報とユーザー固有 path が public output、error、warning、docs に混ざらないことを再確認します。`list_a5sql_connections` は接続候補の存在確認に必要な情報だけを返し、`revealNonSecret: true` の場合でも password、token、private key、完全な接続文字列は返しません。
 
 ```bash
 pnpm release:check

@@ -117,7 +117,11 @@ export function extractConnectionCandidate(
 function* readKeyValues(text: string): Generator<[string, string]> {
   const linePattern = /^\s*([A-Za-z0-9_. -]{2,64})\s*[:=]\s*(.+?)\s*$/gm;
   for (const match of text.matchAll(linePattern)) {
-    yield [match[1] ?? "", match[2] ?? ""];
+    const value = match[2] ?? "";
+    if (looksLikeSemicolonConnectionString(value)) {
+      continue;
+    }
+    yield [match[1] ?? "", value];
   }
 
   const xmlPattern = /<([A-Za-z0-9_.:-]{2,64})(?:\s[^>]*)?>([^<]{1,512})<\/\1>/g;
@@ -129,6 +133,10 @@ function* readKeyValues(text: string): Generator<[string, string]> {
   for (const match of text.matchAll(connectionStringPattern)) {
     yield [match[1] ?? "", match[2] ?? ""];
   }
+}
+
+function looksLikeSemicolonConnectionString(value: string): boolean {
+  return /;[^;\r\n]{2,64}\s*=/.test(value);
 }
 
 function normalizeKey(key: string): string {

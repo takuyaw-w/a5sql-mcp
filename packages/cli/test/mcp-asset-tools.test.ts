@@ -480,6 +480,47 @@ describe("A5:SQL asset MCP tools", () => {
     );
   });
 
+  it("does not expose raw ODBC connection strings in connection candidate output", async () => {
+    const root = await makeTempDir();
+    const configPath = path.join(root, "raw-odbc.ini");
+    await writeFile(
+      configPath,
+      [
+        "Name=Raw ODBC",
+        "Driver=PostgreSQL;Server=db.internal.test;User ID=alice;Pwd=raw-password;Database=app",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { createListA5sqlConnectionsHandler } = await loadAssetHandlers();
+    const result = await createListA5sqlConnectionsHandler!()({
+      roots: [root],
+      limit: 10,
+      revealNonSecret: true,
+    });
+    const serialized = JSON.stringify(result.structuredContent);
+
+    expect(result.structuredContent.connections).toEqual([
+      expect.objectContaining({
+        sourceName: "raw-odbc.ini",
+        hasPassword: true,
+        fields: expect.objectContaining({
+          type: { value: "PostgreSQL", masked: false },
+          host: { value: "db.internal.test", masked: false },
+          database: { value: "app", masked: false },
+          user: { value: "alice", masked: false },
+        }),
+      }),
+    ]);
+    expect(serialized).not.toContain(root);
+    expect(serialized).not.toContain(configPath);
+    expect(serialized).not.toContain("raw-password");
+    expect(serialized).not.toContain(
+      "PostgreSQL;Server=db.internal.test;User ID=alice;Pwd=raw-password;Database=app",
+    );
+    expect(serialized).not.toContain("Server=db.internal.test;User ID=alice");
+  });
+
   it("parses a discovered SQL asset by asset ID", async () => {
     const root = await makeTempDir();
     const sqlPath = path.join(root, "queries", "find-users.sql");
