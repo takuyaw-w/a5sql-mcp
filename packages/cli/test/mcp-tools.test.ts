@@ -84,6 +84,18 @@ async function parseSampleA5er(): Promise<A5erCliResult> {
   return (await parseFile(filePath)) as A5erCliResult;
 }
 
+function expectDraftGenerationOutput(output: Record<string, unknown>): void {
+  expect(output).toEqual(
+    expect.objectContaining({
+      outputKind: "draft",
+      readOnly: true,
+      writesToFileSystem: false,
+      connectsToDatabase: false,
+      executesSql: false,
+    }),
+  );
+}
+
 function buildLargeA5er(tableCount: number, columnsPerTable: number): string {
   const lines = ["# A5:ER FORMAT:19", "# A5:ER ENCODING:UTF8", "[Manager]", 'ProjectName="Large"'];
 
@@ -256,6 +268,7 @@ describe("A5:ER MCP tool helpers", () => {
       warnings: string[];
     };
 
+    expectDraftGenerationOutput(output as Record<string, unknown>);
     expect(output.found).toBe(true);
     expect(output.includedTables).toEqual(["users", "orders"]);
     expect(output.parameters).toEqual([":id"]);
@@ -496,6 +509,7 @@ describe("A5:ER MCP tool helpers", () => {
       plan: string;
     };
 
+    expectDraftGenerationOutput(output as Record<string, unknown>);
     expect(output.operationCount).toBeGreaterThanOrEqual(2);
     expect(output.operations).toEqual(
       expect.arrayContaining([
@@ -525,6 +539,7 @@ describe("A5:ER MCP tool helpers", () => {
       warnings: string[];
     };
 
+    expectDraftGenerationOutput(output as Record<string, unknown>);
     expect(output.tableCount).toBe(2);
     expect(output.warnings).toEqual([]);
     expect(output.markdown).toContain("# Schema Definition");
@@ -559,6 +574,74 @@ describe("A5:ER MCP tool helpers", () => {
     });
 
     expect(JSON.stringify(output)).not.toContain(secretDefault);
+  });
+
+  it("keeps destructive migration operations opt-in", async () => {
+    const parsed = await parseSampleA5er();
+
+    const defaultOutput = generateMigrationPlan(parsed, {
+      liveSchema: {
+        tables: [
+          {
+            name: "users",
+            columns: [
+              { name: "id", dataType: "bigint", nullable: false, primaryKey: true },
+              { name: "legacy_token", dataType: "text", nullable: true },
+            ],
+          },
+          {
+            name: "legacy_sessions",
+            columns: [{ name: "id", dataType: "bigint", nullable: false, primaryKey: true }],
+          },
+        ],
+      },
+      tableNames: ["users"],
+    }) as {
+      includeDestructive: boolean;
+      operations: Array<{ destructive: boolean; kind: string }>;
+      warnings: string[];
+    };
+
+    expectDraftGenerationOutput(defaultOutput as Record<string, unknown>);
+    expect(defaultOutput.includeDestructive).toBe(false);
+    expect(defaultOutput.operations.every((operation) => operation.destructive === false)).toBe(
+      true,
+    );
+    expect(defaultOutput.operations.map((operation) => operation.kind)).not.toContain(
+      "drop_column",
+    );
+    expect(defaultOutput.warnings).toContain("extra_live_column_skipped:users.legacy_token");
+
+    const destructiveOutput = generateMigrationPlan(parsed, {
+      liveSchema: {
+        tables: [
+          {
+            name: "users",
+            columns: [
+              { name: "id", dataType: "bigint", nullable: false, primaryKey: true },
+              { name: "legacy_token", dataType: "text", nullable: true },
+            ],
+          },
+        ],
+      },
+      tableNames: ["users"],
+      includeDestructive: true,
+    }) as {
+      includeDestructive: boolean;
+      operations: Array<{ destructive: boolean; kind: string; column?: string }>;
+    };
+
+    expectDraftGenerationOutput(destructiveOutput as Record<string, unknown>);
+    expect(destructiveOutput.includeDestructive).toBe(true);
+    expect(destructiveOutput.operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          destructive: true,
+          kind: "drop_column",
+          column: "legacy_token",
+        }),
+      ]),
+    );
   });
 
   it("counts all compare issues while returning at most maxIssues entries", async () => {
@@ -621,6 +704,7 @@ describe("A5:ER MCP tool helpers", () => {
       tableCount: number;
     };
 
+    expectDraftGenerationOutput(output as Record<string, unknown>);
     expect(output.tableCount).toBe(1);
     expect(output.files[0]?.path).toBe("app/Models/User.php");
     expect(output.files[0]?.content).toContain("class User extends Model");
@@ -642,6 +726,7 @@ describe("A5:ER MCP tool helpers", () => {
       tableCount: number;
     };
 
+    expectDraftGenerationOutput(output as Record<string, unknown>);
     expect(output.tableCount).toBe(2);
     expect(output.files).toHaveLength(1);
     expect(output.files[0]?.path).toBe("models.py");
@@ -703,6 +788,7 @@ describe("A5:ER MCP tool helpers", () => {
       files: Array<{ path: string }>;
       warnings: string[];
     };
+    expectDraftGenerationOutput(models as Record<string, unknown>);
     expect(models.tableCount).toBe(3);
     expect(models.totalMatchedTableCount).toBe(240);
     expect(models.files).toHaveLength(3);
@@ -719,6 +805,7 @@ describe("A5:ER MCP tool helpers", () => {
       truncated: boolean;
       warnings: string[];
     };
+    expectDraftGenerationOutput(select as Record<string, unknown>);
     expect(select.relatedRelationshipCount).toBe(60);
     expect(select.includedTables).toHaveLength(6);
     expect(select.truncated).toBe(true);

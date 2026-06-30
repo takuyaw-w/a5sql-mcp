@@ -330,7 +330,9 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 
 ### 生成補助 tool
 
-生成補助 tool は、AI や人間がレビューするための案を返します。ファイルシステムへの書き込み、DB への接続、SQL の実行、migration の適用は行いません。
+生成補助 tool は、AI や人間がレビューするための案を返します。ファイルシステムへの書き込み、DB への接続、SQL の実行、migration の適用は行いません。1.0.0 の中核である読み取り API とは分けて扱い、生成系のレスポンスでは `outputKind: "draft"`、`readOnly: true`、`writesToFileSystem: false`、`connectsToDatabase: false`、`executesSql: false` を返します。
+
+ORM や migration framework の対応範囲は意図的に狭く保ちます。0.8.0 では既存の Laravel Eloquent、SQLAlchemy、plain SQL / Laravel / Alembic の範囲を維持し、新しい framework 対応は追加しません。
 
 - `generate_sql_select`: `.a5er` ファイル内の定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。関連テーブルの JOIN は `maxRelatedTables` で上限を指定できます。
 - `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成します。`maxTables` で出力対象テーブル数を制限できます。
