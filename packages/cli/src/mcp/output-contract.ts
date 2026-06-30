@@ -20,6 +20,7 @@ const SOURCE_METADATA_FIELD_CANDIDATES = [
   "fileEncoding",
   "asset",
   "parser",
+  "parseStatus",
 ] as const;
 
 const UNTRUSTED_PAYLOAD_FIELD_CANDIDATES = [

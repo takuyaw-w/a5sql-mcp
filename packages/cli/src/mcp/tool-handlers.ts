@@ -951,9 +951,45 @@ function formatParsedAsset(
     contentIsUntrusted: true,
     warnings: result.warnings,
   };
+  const a5erStructureNotRecognized = result.warnings.includes("a5er_structure_not_recognized");
+  const a5erEncodingMismatch = result.warnings.find((warning) =>
+    warning.startsWith("a5er_encoding_mismatch:"),
+  );
 
   if (result.manager) {
     output.manager = result.manager;
+  }
+
+  const parseStatus =
+    result.parseStatus ??
+    (result.parser === "a5er-ini-v19" && a5erStructureNotRecognized
+      ? "unrecognized"
+      : result.parser === "a5er-ini-v19"
+        ? "ok"
+        : undefined);
+  if (parseStatus) {
+    output.parseStatus = parseStatus;
+  }
+  if (parseStatus === "unrecognized") {
+    output.summary = "unrecognized A5:ER document";
+  }
+  const [, declaredEncoding, decodedEncoding] = a5erEncodingMismatch?.split(":") ?? [];
+  if (result.encoding) {
+    output.encoding = result.encoding;
+  } else if (declaredEncoding) {
+    output.encoding = declaredEncoding;
+  }
+  if (result.fileEncoding) {
+    output.fileEncoding = result.fileEncoding;
+  } else if (decodedEncoding) {
+    output.fileEncoding = decodedEncoding;
+  }
+  if (
+    result.parser === "a5er-ini-v19" &&
+    (parseStatus === "unrecognized" || a5erEncodingMismatch)
+  ) {
+    output.nextAction =
+      "read_a5sql_asset で同じ assetId の先頭範囲を確認し、ファイル形式と文字コードを確認してください。";
   }
 
   if (result.tables) {
