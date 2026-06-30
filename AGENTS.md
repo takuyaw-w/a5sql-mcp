@@ -80,6 +80,7 @@
 - 設定ファイル探索は OS ごとの候補パスを分離し、テストしやすい純粋関数に寄せる。
 - I/O と解析ロジックを分け、解析は小さい fixture でテストできるようにする。
 - MCP のレスポンスは、AI が扱いやすいように安定した JSON スキーマを意識する。
+- 0.9.0 以降の release candidate では、`rtk pnpm release:check` に加えて `rtk pnpm published:check` を実行し、tarball install 後の MCP startup と `tools/list` を確認する。
 
 ## ドキュメント方針
 

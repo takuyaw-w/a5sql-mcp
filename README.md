@@ -190,6 +190,18 @@ a5sql の review_a5sql_schema を使って、NULL 許容、主キー、外部キ
 
 将来 DB 実行機能を追加する場合は、読み取り専用クエリ、明示的な許可、監査ログ、タイムアウト、件数制限を別設計で必須条件にします。
 
+## 1.0.0 に含めないもの
+
+1.0.0 では次の機能を含めません。
+
+- 接続先 DB への SQL 実行。
+- A5:SQL 設定ファイルや ER 図ファイルへの書き込み。
+- 資格情報の復号、表示、保存。
+- ORM や migration framework への完全対応。
+- Web UI や常駐 daemon。
+
+これらを将来追加する場合は、読み取り専用クエリ、明示的な許可、監査ログ、タイムアウト、件数制限などを別設計で扱います。
+
 ---
 
 ## パッケージ構成
@@ -263,6 +275,17 @@ pnpm build
 pnpm pack:check
 ```
 
+## 開発者向けリリース確認
+
+0.9.0 のリリース候補として、通常の検証に加えて package として install した後の MCP 起動まで確認します。
+
+```bash
+pnpm release:check
+pnpm published:check
+```
+
+`published:check` は parser / core / cli の tarball を一時ディレクトリに install し、install 後の `a5sql-mcp --mcp example/schema.a5er` から `tools/list` を確認します。`Tools: (none)` や期待 tool の不足は失敗として扱います。
+
 ## CLI
 
 ローカル開発中は、まず build してから root script で実行します。
@@ -332,7 +355,7 @@ node packages/cli/dist/index.js ./path/to/model.a5er
 
 生成補助 tool は、AI や人間がレビューするための案を返します。ファイルシステムへの書き込み、DB への接続、SQL の実行、migration の適用は行いません。1.0.0 の中核である読み取り API とは分けて扱い、生成系のレスポンスでは `outputKind: "draft"`、`readOnly: true`、`writesToFileSystem: false`、`connectsToDatabase: false`、`executesSql: false` を返します。
 
-ORM や migration framework の対応範囲は意図的に狭く保ちます。0.8.0 では既存の Laravel Eloquent、SQLAlchemy、plain SQL / Laravel / Alembic の範囲を維持し、新しい framework 対応は追加しません。
+ORM や migration framework の対応範囲は意図的に狭く保ちます。現時点では既存の Laravel Eloquent、SQLAlchemy、plain SQL / Laravel / Alembic の範囲を維持し、新しい framework 対応は追加しません。
 
 - `generate_sql_select`: `.a5er` ファイル内の定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。関連テーブルの JOIN は `maxRelatedTables` で上限を指定できます。
 - `generate_mermaid_er_diagram`: `.a5er` ファイル内のテーブルとリレーションから Mermaid ER diagram を生成します。`maxTables` で出力対象テーブル数を制限できます。
