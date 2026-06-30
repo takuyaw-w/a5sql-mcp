@@ -51,6 +51,8 @@
 
 `.a5er` の解析結果では `parseStatus` を必ず確認する。`unrecognized` の場合は、空の正常スキーマとして扱わず、`read_a5sql_file` で先頭行・文字コード・ファイル形式を確認する。`a5er_structure_not_recognized` は A5:ER らしい構造が見つからないことを示し、`a5er_encoding_mismatch:<declared>:<decoded>` はヘッダー上の文字コードと実デコード結果の不一致を示す。
 
+0.9.6 の parser robustness では、壊れたファイルや prompt injection 風 payload を含むファイルでも、`warnings`、`message`、`code`、`nextAction` に A5:SQL 由来の文字列を混ぜないことを確認する。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
