@@ -108,7 +108,7 @@ Claude Code のセッション内では `/mcp` で接続状態を確認できま
 
 `A5SQL_MCP_ROOTS` は asset 探索・asset 読み取り・接続候補確認で使う root です。`parse_a5sql_asset` でも同じ root 制約を使います。指定した root 配下のファイル名、パス、抜粋が MCP レスポンスに含まれ得るため、必要な最小範囲だけを指定してください。
 
-root 未指定の場合、`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は OS、home、APPDATA、Wine などの既定候補を探索しません。`detect_a5sql_locations` で候補を確認し、読む必要がある root だけを tool input の roots または A5SQL_MCP_ROOTS に明示してください。
+root 未指定の場合、`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は OS、home、APPDATA、Wine などの既定候補を探索しません。`detect_a5sql_locations` で候補を確認し、読む必要がある root だけを tool input の `roots` または `A5SQL_MCP_ROOTS` に明示してください。
 
 推奨する指定例:
 

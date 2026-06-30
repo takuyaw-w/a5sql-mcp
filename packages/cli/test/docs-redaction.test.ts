@@ -46,8 +46,8 @@ describe("public documentation redaction audit", () => {
     expect(readme).toContain("必要最小限");
 
     for (const { relativePath, text } of docs) {
-      expect(text, `${relativePath} should document explicit roots`).toContain(
-        "roots または A5SQL_MCP_ROOTS",
+      expect(text, `${relativePath} should document explicit roots`).toMatch(
+        /`roots`\s*または\s*`A5SQL_MCP_ROOTS`/,
       );
     }
   });
