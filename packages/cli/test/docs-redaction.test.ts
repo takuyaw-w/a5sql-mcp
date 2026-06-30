@@ -31,11 +31,24 @@ describe("public documentation redaction audit", () => {
     }
   });
 
-  it("documents the 0.9.4 redaction and path privacy release check", async () => {
-    const readme = await readFile(new URL("../../../README.md", import.meta.url), "utf8");
+  it("documents the 0.9.5 root boundary release check", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+    const readme = docs.find((doc) => doc.relativePath === "../../../README.md")?.text ?? "";
 
-    expect(readme).toContain("0.9.4");
-    expect(readme).toContain("秘密情報とユーザー固有 path");
-    expect(readme).toContain("完全な接続文字列");
+    expect(readme).toContain("0.9.5");
+    expect(readme).toContain("root 未指定");
+    expect(readme).toContain("候補提示だけ");
+    expect(readme).toContain("必要最小限");
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document explicit roots`).toContain(
+        "roots または A5SQL_MCP_ROOTS",
+      );
+    }
   });
 });

@@ -108,7 +108,7 @@ Claude Code のセッション内では `/mcp` で接続状態を確認できま
 
 `A5SQL_MCP_ROOTS` は asset 探索・asset 読み取り・接続候補確認で使う root です。`parse_a5sql_asset` でも同じ root 制約を使います。指定した root 配下のファイル名、パス、抜粋が MCP レスポンスに含まれ得るため、必要な最小範囲だけを指定してください。
 
-root 未指定の場合、`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は OS、home、APPDATA、Wine などの既定候補を探索しません。`detect_a5sql_locations` で候補を確認し、読む必要がある root だけを tool input の `roots` または `A5SQL_MCP_ROOTS` に明示してください。
+root 未指定の場合、`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は OS、home、APPDATA、Wine などの既定候補を探索しません。`detect_a5sql_locations` で候補を確認し、読む必要がある root だけを tool input の roots または A5SQL_MCP_ROOTS に明示してください。
 
 推奨する指定例:
 
@@ -281,9 +281,9 @@ pnpm pack:check
 
 ## 開発者向けリリース確認
 
-0.9.4 のリリース候補として、通常の検証に加えて package として install した後の MCP 起動まで確認します。
+0.9.5 のリリース候補として、通常の検証に加えて package として install した後の MCP 起動まで確認します。
 
-0.9.4 では、秘密情報とユーザー固有 path が public output、error、warning、docs に混ざらないことを再確認します。`list_a5sql_connections` は接続候補の存在確認に必要な情報だけを返し、`revealNonSecret: true` の場合でも password、token、private key、完全な接続文字列は返しません。
+0.9.5 では、`roots` / `A5SQL_MCP_ROOTS` の最小権限境界を再確認します。root 未指定の場合、`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は OS、home、APPDATA、Wine などの既定候補を探索しません。`detect_a5sql_locations` は候補提示だけを行い、そこで見つかった path を自動で探索 root にしません。A5:SQL の設定ディレクトリ、保存済み SQL ディレクトリ、対象プロジェクトの ER 図や SQL を置いた作業ディレクトリなど、必要最小限の root だけを指定してください。
 
 ```bash
 pnpm release:check

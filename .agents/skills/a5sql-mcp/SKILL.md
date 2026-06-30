@@ -65,7 +65,7 @@ ROADMAP.md に沿った実装で、Superpowers の brainstorming / writing-plans
 
 現在の stdio MCP サーバーは `packages/cli` の `--mcp` モードで提供します。独立した `packages/mcp-server` は使いません。
 
-現在の tool は、起動時に指定されたファイルと、`roots` または `A5SQL_MCP_ROOTS` で許可されたローカル asset を読み取り専用で扱います。
+現在の tool は、起動時に指定されたファイルと、roots または A5SQL_MCP_ROOTS で許可されたローカル asset を読み取り専用で扱います。
 
 - `describe_a5sql_file`
 - `parse_a5sql_file`

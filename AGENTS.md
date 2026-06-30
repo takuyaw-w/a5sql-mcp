@@ -60,7 +60,7 @@
 
 ## セキュリティとプライバシー
 
-- `A5SQL_MCP_ROOTS` や tool input の `roots` は、目的に必要な最小範囲を前提に設計・説明する。
+- roots または A5SQL_MCP_ROOTS は、目的に必要な最小範囲を前提に設計・説明する。
 - `detect_a5sql_locations` は候補提示だけに使う。`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は、root 未指定時に APPDATA、LOCALAPPDATA、USERPROFILE、home、Wine などの既定候補を探索対象にしない。
 - パスワード、トークン、秘密鍵、接続文字列、個人情報をそのまま返さない。
 - 接続情報を扱う場合は、ホスト名・DB 名・ユーザー名も必要性を判断してマスク可能にする。
