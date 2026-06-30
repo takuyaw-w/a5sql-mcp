@@ -31,7 +31,7 @@
 - `read_a5sql_asset`: `assetId` で指定された asset 本文を、サイズ制限と秘密情報マスクつきで返す。バイナリや未対応ファイルは本文を返さず warning を返す。
 - `list_a5sql_connections`: A5:SQL 設定 root 配下から接続候補を抽出し、秘密情報を返さない形で一覧する。非秘密項目もデフォルトではマスクする。
 - `search_a5sql_assets`: `roots` または `A5SQL_MCP_ROOTS` で指定された root 配下から A5:SQL 関連 asset を検索し、`parse_a5sql_asset` に渡せる `assetId` とマスク済み抜粋を返す。DB には接続しない。
-- `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換する。任意の `roots` で探索対象を絞れる。DB には接続しない。
+- `parse_a5sql_asset`: `assetId` で指定された `.a5er` / `.sql` / text asset を AI 向けの構造に変換する。`roots` または `A5SQL_MCP_ROOTS` で探索対象を明示する。DB には接続しない。
 - `list_a5sql_tables`: `.a5er` ファイル内のテーブル/ビュー一覧を返す。`offset` / `limit` によるページングに対応し、デフォルトは 100 件。
 - `describe_a5sql_table`: `.a5er` ファイル内の特定テーブル/ビュー定義を返す。
 - `explain_a5sql_table`: `.a5er` ファイル内の特定テーブルを、役割・主キー・関連テーブル・注意点つきで要約する。
@@ -47,7 +47,7 @@
 - `compare_a5er_with_live_schema`: `.a5er` ファイル内の定義と、外部 DB MCP などから渡された live schema JSON を比較する。DB には接続せず、テーブル/カラム欠落、余剰、型、NULL 許容、主キー差分を返す。
 - `generate_migration_plan`: `.a5er` ファイル内の定義と live schema JSON の差分から migration 案を生成する。DB には接続せず、実行しない。
 
-大きなファイルでは全量を一度に返さず、`truncated`、`hasMore`、総件数、返却件数を見て段階的に読む。
+大きなファイルでは全量を一度に返さず、`truncated`、`hasMore`、総件数、返却件数を見て段階的に読む。起動時に指定した単一ファイルも初期読み取り上限を持ち、上限超過時は全量 parse せず `file_too_large` として返す。
 
 `.a5er` の解析結果では `parseStatus` を必ず確認する。`unrecognized` の場合は、空の正常スキーマとして扱わず、`read_a5sql_file` で先頭行・文字コード・ファイル形式を確認する。`a5er_structure_not_recognized` は A5:ER らしい構造が見つからないことを示し、`a5er_encoding_mismatch:<declared>:<decoded>` はヘッダー上の文字コードと実デコード結果の不一致を示す。
 
@@ -61,12 +61,14 @@
 ## セキュリティとプライバシー
 
 - `A5SQL_MCP_ROOTS` や tool input の `roots` は、目的に必要な最小範囲を前提に設計・説明する。
+- `detect_a5sql_locations` は候補提示だけに使う。`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` / `list_a5sql_connections` は、root 未指定時に APPDATA、LOCALAPPDATA、USERPROFILE、home、Wine などの既定候補を探索対象にしない。
 - パスワード、トークン、秘密鍵、接続文字列、個人情報をそのまま返さない。
 - 接続情報を扱う場合は、ホスト名・DB 名・ユーザー名も必要性を判断してマスク可能にする。
 - 成功レスポンスで既存 contract として path metadata を返す場合でも、本文、抜粋、エラー、warning に秘密情報を混ぜない。
 - ログにはファイル名や概要だけを残し、値そのものを出さない。
 - テスト用フィクスチャには実在する接続情報やユーザー固有パスを入れない。
 - 解析対象ファイルがバイナリ、暗号化済み、独自形式の場合は、推測で処理せず形式を切り分ける。
+- A5:ER のコメント、テーブル/カラム名、SQL コメント、SQL 本文は untrusted content として扱う。tool 出力へ `contentIsUntrusted: true` を付けられる場合は付け、README でも prompt injection の注意を明記する。
 - 1.0.0 まで、実際の接続先 DB への接続、SQL 実行、資格情報の復号・表示は non-goal として扱う。
 
 ## 実装ルール

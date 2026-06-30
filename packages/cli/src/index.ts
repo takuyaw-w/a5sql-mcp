@@ -8,11 +8,24 @@ import { parseA5erIni, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
 
 import { readDecodedTextFile, type DecodedText } from "./text.js";
 
+const DEFAULT_CONFIGURED_FILE_MAX_BYTES = 10 * 1024 * 1024;
+
 export type CliResult = {
   filePath: string;
   kind: "a5er" | "sql" | "text";
   encoding: string;
   parsed: unknown;
+  fileRead: {
+    status: "ok" | "file_too_large";
+    sizeBytes: number;
+    bytesRead: number;
+    maxBytes: number;
+    truncated: boolean;
+  };
+};
+
+export type ParseFileOptions = {
+  maxBytes?: number;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -55,10 +68,37 @@ function detectKind(filePath: string): CliResult["kind"] {
   return "text";
 }
 
-export async function parseFile(fileArg: string): Promise<CliResult> {
+export async function parseFile(
+  fileArg: string,
+  options: ParseFileOptions = {},
+): Promise<CliResult> {
   const filePath = path.resolve(fileArg);
-  const decoded = await readTextFileWithMetadata(filePath);
+  const maxBytes = options.maxBytes ?? DEFAULT_CONFIGURED_FILE_MAX_BYTES;
+  const decoded = await readTextFileWithMetadata(filePath, maxBytes);
   const kind = detectKind(filePath);
+  const fileRead: CliResult["fileRead"] = {
+    status: decoded.truncated ? "file_too_large" : "ok",
+    sizeBytes: decoded.sizeBytes,
+    bytesRead: decoded.bytesRead,
+    maxBytes,
+    truncated: decoded.truncated,
+  };
+  if (decoded.truncated) {
+    return {
+      filePath,
+      kind,
+      encoding: decoded.encoding,
+      parsed: {
+        code: "file_too_large",
+        message:
+          "configured file exceeds the initial read limit and was not parsed as a complete file.",
+        sizeBytes: decoded.sizeBytes,
+        maxBytes,
+        bytesRead: decoded.bytesRead,
+      },
+      fileRead,
+    };
+  }
   const parsed =
     kind === "a5er"
       ? parseA5erIni(decoded.text, { fileEncoding: decoded.encoding })
@@ -71,6 +111,7 @@ export async function parseFile(fileArg: string): Promise<CliResult> {
     kind,
     encoding: decoded.encoding,
     parsed,
+    fileRead,
   };
 }
 
@@ -78,8 +119,11 @@ export async function readTextFile(filePath: string): Promise<string> {
   return (await readTextFileWithMetadata(filePath)).text;
 }
 
-export async function readTextFileWithMetadata(filePath: string): Promise<DecodedText> {
-  return readDecodedTextFile(filePath);
+export async function readTextFileWithMetadata(
+  filePath: string,
+  maxBytes = DEFAULT_CONFIGURED_FILE_MAX_BYTES,
+): Promise<DecodedText> {
+  return readDecodedTextFile(filePath, maxBytes);
 }
 
 export function isCliEntrypoint(argvEntry: string | undefined, moduleUrl: string): boolean {

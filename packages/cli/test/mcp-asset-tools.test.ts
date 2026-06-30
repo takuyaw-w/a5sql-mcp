@@ -236,6 +236,35 @@ describe("A5:SQL asset MCP tools", () => {
     expect(serialized).not.toContain(root);
   });
 
+  it("requires explicit roots for asset ID reads, asset search, and connection listing", async () => {
+    const {
+      createListA5sqlConnectionsHandler,
+      createReadA5sqlAssetHandler,
+      createSearchA5sqlAssetsHandler,
+    } = await loadAssetHandlers();
+
+    const read = await createReadA5sqlAssetHandler!()({ assetId: stableAssetId("missing.sql") });
+    const search = await createSearchA5sqlAssetsHandler!()({ query: "users" });
+    const connections = await createListA5sqlConnectionsHandler!()({});
+
+    expect(read.structuredContent).toMatchObject({
+      found: false,
+      code: "roots_required",
+    });
+    expect(search.structuredContent).toMatchObject({
+      count: 0,
+      returnedAssetCount: 0,
+      code: "roots_required",
+      warnings: ["roots_required"],
+    });
+    expect(connections.structuredContent).toMatchObject({
+      totalConnectionCount: 0,
+      returnedConnectionCount: 0,
+      code: "roots_required",
+      warnings: ["roots_required"],
+    });
+  });
+
   it("rejects ambiguous or missing read asset selectors", async () => {
     const root = await makeTempDir();
     const sqlPath = path.join(root, "queries", "ambiguous.sql");

@@ -1,20 +1,43 @@
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { TextDecoder } from "node:util";
 
 export type DecodedText = {
   text: string;
   encoding: string;
+  bytesRead: number;
+  sizeBytes: number;
+  truncated: boolean;
 };
 
 const UTF8_BOM = [0xef, 0xbb, 0xbf] as const;
 const UTF16LE_BOM = [0xff, 0xfe] as const;
 const TEXT_ENCODINGS = ["utf-8", "shift_jis", "utf-16le"] as const;
 
-export async function readDecodedTextFile(filePath: string): Promise<DecodedText> {
-  return decodeTextBuffer(await readFile(filePath));
+export async function readDecodedTextFile(
+  filePath: string,
+  maxBytes = Number.POSITIVE_INFINITY,
+): Promise<DecodedText> {
+  const file = await open(filePath, "r");
+  try {
+    const fileStat = await file.stat();
+    const length = Math.min(fileStat.size, maxBytes);
+    const slice = Buffer.alloc(length);
+    const { bytesRead } = await file.read(slice, 0, length, 0);
+    const buffer = slice.subarray(0, bytesRead);
+    return {
+      ...decodeTextBuffer(buffer),
+      bytesRead,
+      sizeBytes: fileStat.size,
+      truncated: fileStat.size > bytesRead,
+    };
+  } finally {
+    await file.close();
+  }
 }
 
-export function decodeTextBuffer(buffer: Buffer): DecodedText {
+export function decodeTextBuffer(
+  buffer: Buffer,
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> {
   if (startsWithBytes(buffer, UTF8_BOM)) {
     return decodeWithEncoding(buffer.subarray(UTF8_BOM.length), "utf-8");
   }
@@ -44,7 +67,7 @@ export function decodeTextBuffer(buffer: Buffer): DecodedText {
 function tryDecodeWithEncoding(
   buffer: Buffer,
   encoding: (typeof TEXT_ENCODINGS)[number],
-): DecodedText | null {
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> | null {
   try {
     const decoder = new TextDecoder(encoding, { fatal: encoding !== "shift_jis" });
     const text = decoder.decode(buffer);
@@ -60,7 +83,10 @@ function tryDecodeWithEncoding(
   }
 }
 
-function decodeWithEncoding(buffer: Buffer, encoding: string): DecodedText {
+function decodeWithEncoding(
+  buffer: Buffer,
+  encoding: string,
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> {
   const decoderEncoding = encoding === "utf-8-lossy" ? "utf-8" : encoding;
   const decoder = new TextDecoder(decoderEncoding, { fatal: false });
   return {

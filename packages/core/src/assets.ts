@@ -2,7 +2,6 @@ import { opendir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { stableAssetId } from "./hash.js";
-import { detectA5sqlLocations } from "./locations.js";
 import { maskSensitiveText } from "./mask.js";
 import { readTextFile } from "./text.js";
 import type {
@@ -202,8 +201,17 @@ async function resolveReadableRoots(roots: string[] | undefined): Promise<string
   if (roots && roots.length > 0) {
     return roots.map((root) => path.resolve(root));
   }
-  const detected = await detectA5sqlLocations();
-  return detected.filter((item) => item.exists && item.readable).map((item) => item.path);
+  return splitRoots(process.env.A5SQL_MCP_ROOTS).map((root) => path.resolve(root));
+}
+
+function splitRoots(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(path.delimiter)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function isTextSearchable(filePath: string): boolean {

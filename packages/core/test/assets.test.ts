@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -209,6 +209,27 @@ describe("A5:SQL asset search", () => {
     await expect(readA5sqlAsset({ path: sqlPath })).resolves.toBeNull();
   });
 
+  it("does not search platform or home defaults when roots are omitted", async () => {
+    const originalUserProfile = process.env.USERPROFILE;
+    const originalRoots = process.env.A5SQL_MCP_ROOTS;
+    const root = await makeTempDir();
+    const defaultCandidate = path.join(root, "A5M2");
+    const sqlPath = path.join(defaultCandidate, "leaky.sql");
+    await mkdir(defaultCandidate, { recursive: true });
+    await writeFile(sqlPath, "select 'default root marker' as memo;", "utf8");
+
+    try {
+      process.env.USERPROFILE = root;
+      delete process.env.A5SQL_MCP_ROOTS;
+
+      await expect(searchA5sqlAssets({ query: "default root marker" })).resolves.toEqual([]);
+      await expect(readA5sqlAsset({ assetId: stableAssetId(sqlPath) })).resolves.toBeNull();
+    } finally {
+      restoreEnv("USERPROFILE", originalUserProfile);
+      restoreEnv("A5SQL_MCP_ROOTS", originalRoots);
+    }
+  });
+
   it("reports when search stops because maxFiles is reached", async () => {
     const root = await makeTempDir();
     await writeFile(path.join(root, "first.sql"), "select * from users;", "utf8");
@@ -237,4 +258,16 @@ async function makeTempDir(): Promise<string> {
     recursive: true,
   });
   return dir;
+}
+
+function stableAssetId(filePath: string): string {
+  return createHash("sha256").update(path.resolve(filePath)).digest("hex").slice(0, 24);
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
 }

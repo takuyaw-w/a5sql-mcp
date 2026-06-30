@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
 
 describe("A5:SQL MCP server smoke", () => {
-  it("reports 0.9.0 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.0");
+  it("reports 0.9.1 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.1");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -26,19 +26,28 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.9.0",
-      "0.9.0",
-      "0.9.0",
-      "0.9.0",
+      "0.9.1",
+      "0.9.1",
+      "0.9.1",
+      "0.9.1",
     ]);
   });
 
   it("lists current tools and returns representative structuredContent contracts", async () => {
     const root = path.join(os.tmpdir(), `a5sql-mcp-smoke-${randomUUID()}`);
-    const filePath = path.join(root, "schema.sql");
+    const filePath = path.join(root, "schema.a5er");
     const extraFilePath = path.join(root, "extra.sql");
     await mkdir(root, { recursive: true });
-    await writeFile(filePath, "select * from users;", "utf8");
+    await writeFile(
+      filePath,
+      [
+        "# A5:ER FORMAT:19",
+        "[Entity]",
+        "PName=users",
+        'Field="ID","id","Integer","NOT NULL",0,"","",$FFFFFFFF,""',
+      ].join("\n"),
+      "utf8",
+    );
     await writeFile(extraFilePath, "select * from accounts where token='raw-token';", "utf8");
 
     const server = await createA5sqlMcpServer({ fileArg: filePath });
@@ -50,6 +59,7 @@ describe("A5:SQL MCP server smoke", () => {
 
       const tools = await client.listTools();
       const toolNames = tools.tools.map((tool) => tool.name);
+      const generateSelect = tools.tools.find((tool) => tool.name === "generate_sql_select");
 
       expect(toolNames).toEqual(
         expect.arrayContaining([
@@ -60,6 +70,7 @@ describe("A5:SQL MCP server smoke", () => {
           "parse_a5sql_asset",
         ]),
       );
+      expect(generateSelect?.description).toContain("experimental draft");
 
       const result = await client.callTool({
         name: "detect_a5sql_locations",

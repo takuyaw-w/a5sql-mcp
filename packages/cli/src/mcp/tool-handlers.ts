@@ -42,6 +42,10 @@ const DEFAULT_ASSET_MAX_RELATIONSHIPS = 200;
 const DEFAULT_ASSET_MAX_COLUMNS_PER_TABLE = 100;
 const DEFAULT_ASSET_MAX_STATEMENTS = 100;
 
+function hasExplicitRoots(roots: string[] | undefined): boolean {
+  return Boolean(roots?.length) || Boolean(process.env.A5SQL_MCP_ROOTS?.trim());
+}
+
 export function createDescribeA5sqlFileHandler(getParsedFile: ParsedFileLoader) {
   return async () => {
     const parsed = await getParsedFile();
@@ -72,15 +76,19 @@ export function createParseA5sqlFileHandler(getParsedFile: ParsedFileLoader) {
   }) => {
     const parsed = await getParsedFile();
     if (mode === "full") {
-      return jsonResult(
-        formatFullParsedFile(parsed, {
+      return jsonResult({
+        ...formatFullParsedFile(parsed, {
           maxTables,
           maxRelationships,
           maxColumnsPerTable,
         }),
-      );
+        contentIsUntrusted: true,
+      });
     }
-    return jsonResult(summarizeParsedFile(parsed, { limit: summaryLimit }));
+    return jsonResult({
+      ...summarizeParsedFile(parsed, { limit: summaryLimit }),
+      contentIsUntrusted: true,
+    });
   };
 }
 
@@ -97,19 +105,34 @@ export function createReadA5sqlFileHandler(initialFile: CliResult) {
     maxLines?: number;
   }) => {
     const limit = maxChars ?? DEFAULT_FILE_READ_MAX_CHARS;
-    const decoded = await readTextFileWithMetadata(initialFile.filePath);
-    const maskedText = maskForPublicConsumption(decoded.text);
-    return jsonResult(
-      sliceFileText(maskedText, {
-        filePath: initialFile.filePath,
-        kind: initialFile.kind,
-        encoding: decoded.encoding,
-        maxChars: limit,
-        offsetChars,
-        startLine,
-        maxLines,
-      }),
+    const decoded = await readTextFileWithMetadata(
+      initialFile.filePath,
+      initialFile.fileRead.maxBytes,
     );
+    const maskedText = maskForPublicConsumption(decoded.text);
+    const sliced = sliceFileText(maskedText, {
+      filePath: initialFile.filePath,
+      kind: initialFile.kind,
+      encoding: decoded.encoding,
+      maxChars: limit,
+      offsetChars,
+      startLine,
+      maxLines,
+    });
+    return jsonResult({
+      ...sliced,
+      contentIsUntrusted: true,
+      code: decoded.truncated ? "file_too_large" : undefined,
+      sizeBytes: decoded.sizeBytes,
+      bytesRead: decoded.bytesRead,
+      maxBytes: initialFile.fileRead.maxBytes,
+      truncated: Boolean(sliced.truncated) || decoded.truncated,
+      hasMore: Boolean(sliced.hasMore) || decoded.truncated,
+      warnings: decoded.truncated ? ["file_too_large"] : [],
+      nextAction: decoded.truncated
+        ? "起動時ファイルが上限を超えています。より小さいファイルを指定するか、必要な asset root を絞って read_a5sql_asset を使ってください。"
+        : sliced.nextAction,
+    });
   };
 }
 
@@ -168,6 +191,19 @@ export function createReadA5sqlAssetHandler() {
       });
     }
 
+    if (assetId && !hasExplicitRoots(roots)) {
+      return jsonResult({
+        found: false,
+        assetId,
+        code: "roots_required",
+        message:
+          "assetId で読み取る場合は、roots または A5SQL_MCP_ROOTS で探索 root を明示してください。",
+        warnings: ["roots_required"],
+        nextAction:
+          "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
+      });
+    }
+
     const result = await readA5sqlAsset({ roots, assetId, path, maxBytes });
     if (!result) {
       return jsonResult({
@@ -209,6 +245,7 @@ export function createReadA5sqlAssetHandler() {
       returnedChars: sliced.returnedChars,
       totalChars: sliced.totalChars,
       warnings: result.warnings,
+      contentIsUntrusted: true,
       nextAction:
         result.asset.kind === "er" || result.asset.kind === "sql"
           ? "parse_a5sql_asset に同じ assetId を渡すと構造化できます。"
@@ -227,6 +264,18 @@ export function createListA5sqlConnectionsHandler() {
     limit?: number;
     revealNonSecret?: boolean;
   }) => {
+    if (!hasExplicitRoots(roots)) {
+      return jsonResult({
+        connections: [],
+        totalConnectionCount: 0,
+        returnedConnectionCount: 0,
+        truncated: false,
+        code: "roots_required",
+        warnings: ["roots_required"],
+        nextAction:
+          "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
+      });
+    }
     const effectiveLimit = limit ?? 50;
     const requestedLimit = effectiveLimit < 200 ? effectiveLimit + 1 : effectiveLimit;
     const connections = await listA5sqlConnections({
@@ -369,6 +418,23 @@ export function createSearchA5sqlAssetsHandler() {
     maxFiles?: number;
     maxFileBytes?: number;
   }) => {
+    if (!hasExplicitRoots(roots)) {
+      return jsonResult({
+        query: query ?? null,
+        roots: null,
+        effectiveLimit: limit ?? 50,
+        count: 0,
+        returnedAssetCount: 0,
+        visitedFileCount: 0,
+        truncated: false,
+        cutoffReason: null,
+        code: "roots_required",
+        warnings: ["roots_required"],
+        nextAction:
+          "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
+        assets: [],
+      });
+    }
     const searchResult = await searchA5sqlAssetsWithMetadata({
       roots,
       query,
@@ -424,6 +490,18 @@ export function createParseA5sqlAssetHandler() {
     maxColumnsPerTable?: number;
     maxStatements?: number;
   }) => {
+    if (!hasExplicitRoots(roots)) {
+      return jsonResult({
+        found: false,
+        assetId,
+        code: "roots_required",
+        message:
+          "assetId で解析する場合は、roots または A5SQL_MCP_ROOTS で探索 root を明示してください。",
+        warnings: ["roots_required"],
+        nextAction:
+          "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
+      });
+    }
     const parsed = await parseA5sqlAsset({ roots, assetId, maxBytes });
     if (!parsed) {
       return jsonResult({
@@ -865,6 +943,7 @@ function formatParsedAsset(
     asset: result.asset,
     parser: result.parser,
     summary: result.summary,
+    contentIsUntrusted: true,
     warnings: result.warnings,
   };
 

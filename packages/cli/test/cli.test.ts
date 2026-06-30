@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { createReadA5sqlFileHandler } from "../src/mcp/tool-handlers.js";
 import { isCliEntrypoint, parseFile } from "../src/index.js";
 
 describe("a5sql-mcp cli", () => {
@@ -118,6 +119,53 @@ describe("a5sql-mcp cli", () => {
     expect(output.parsed.parseStatus).toBe("unrecognized");
     expect(output.parsed.warnings).toContain("a5er_structure_not_recognized");
     expect(output.parsed.tables).toEqual([]);
+  });
+
+  it("reports configured files that exceed the initial read limit without parsing the whole file", async () => {
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-cli-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, "large.sql");
+    const source = "select 1;\nselect 2;\n";
+    await writeFile(filePath, source, "utf8");
+
+    const output = await parseFile(filePath, { maxBytes: 8 });
+
+    expect(output.fileRead).toMatchObject({
+      status: "file_too_large",
+      sizeBytes: Buffer.byteLength(source, "utf8"),
+      bytesRead: 8,
+      maxBytes: 8,
+      truncated: true,
+    });
+    expect(output.parsed).toMatchObject({
+      code: "file_too_large",
+      maxBytes: 8,
+      sizeBytes: Buffer.byteLength(source, "utf8"),
+    });
+  });
+
+  it("reads only the bounded prefix of a configured file that exceeded the initial limit", async () => {
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-cli-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, "large.sql");
+    const source = "select 'raw-token' as secret;\nselect 2;\n";
+    await writeFile(filePath, source, "utf8");
+    const parsed = await parseFile(filePath, { maxBytes: 12 });
+
+    const result = await createReadA5sqlFileHandler(parsed)({ maxChars: 100 });
+
+    expect(result.structuredContent).toMatchObject({
+      code: "file_too_large",
+      contentIsUntrusted: true,
+      maxBytes: 12,
+      bytesRead: 12,
+      sizeBytes: Buffer.byteLength(source, "utf8"),
+      truncated: true,
+      hasMore: true,
+      warnings: ["file_too_large"],
+    });
+    expect(result.structuredContent.text).toBe("select 'raw-");
+    expect(JSON.stringify(result.structuredContent)).not.toContain("raw-token");
   });
 
   it("detects package bin symlink as direct cli invocation", async () => {

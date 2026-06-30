@@ -58,7 +58,7 @@ export type McpServerOptions = {
   fileArg: string;
 };
 
-export const A5SQL_MCP_SERVER_VERSION = "0.9.0";
+export const A5SQL_MCP_SERVER_VERSION = "0.9.1";
 
 export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void> {
   const server = await createA5sqlMcpServer({ fileArg });
@@ -140,7 +140,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     {
       title: "Read A5:SQL asset by asset ID",
       description:
-        "search_a5sql_assets で見つけた assetId の本文を、サイズ制限と秘密情報マスクつきで返します。DB には接続しません。",
+        "roots または A5SQL_MCP_ROOTS で明示した root 配下について、search_a5sql_assets で見つけた assetId の本文を、サイズ制限と秘密情報マスクつきで返します。DB には接続しません。",
       inputSchema: readA5sqlAssetInputSchema,
     },
     createReadA5sqlAssetHandler(),
@@ -151,7 +151,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     {
       title: "List masked A5:SQL connection candidates",
       description:
-        "A5:SQL 設定 root 配下から接続候補を抽出し、秘密情報を返さない形で一覧します。DB には接続しません。",
+        "roots または A5SQL_MCP_ROOTS で明示した A5:SQL 設定 root 配下から接続候補を抽出し、秘密情報を返さない形で一覧します。DB には接続しません。",
       inputSchema: listA5sqlConnectionsInputSchema,
     },
     createListA5sqlConnectionsHandler(),
@@ -162,7 +162,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     {
       title: "Search A5:SQL assets",
       description:
-        "A5:SQL 関連 asset を root 配下から検索し、parse_a5sql_asset に渡せる assetId と抜粋を返します。DB には接続しません。",
+        "roots または A5SQL_MCP_ROOTS で明示した root 配下から A5:SQL 関連 asset を検索し、parse_a5sql_asset に渡せる assetId と抜粋を返します。DB には接続しません。",
       inputSchema: searchA5sqlAssetsInputSchema,
     },
     createSearchA5sqlAssetsHandler(),
@@ -173,7 +173,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     {
       title: "Parse A5:SQL asset by asset ID",
       description:
-        "A5:SQL 関連 asset を assetId で指定し、.a5er または .sql を AI が扱いやすい JSON に変換します。DB には接続しません。",
+        "roots または A5SQL_MCP_ROOTS で明示した root 配下の A5:SQL 関連 asset を assetId で指定し、.a5er または .sql を AI が扱いやすい JSON に変換します。DB には接続しません。",
       inputSchema: parseA5sqlAssetInputSchema,
     },
     createParseA5sqlAssetHandler(),
@@ -277,7 +277,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     {
       title: "Generate SELECT SQL from configured A5:ER file",
       description:
-        "MCP サーバー起動時に指定された .a5er ファイルの定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。",
+        "experimental draft tool: MCP サーバー起動時に指定された .a5er ファイルの定義から、指定テーブルを起点にした SELECT SQL のたたき台を生成します。DB には接続しません。",
       inputSchema: generateSqlSelectInputSchema,
     },
     createGenerateSqlSelectHandler(getParsedFile),
@@ -288,7 +288,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     {
       title: "Generate Mermaid ER diagram from configured A5:ER file",
       description:
-        "MCP サーバー起動時に指定された .a5er ファイルのテーブルとリレーションから Mermaid ER diagram を生成します。",
+        "experimental draft tool: MCP サーバー起動時に指定された .a5er ファイルのテーブルとリレーションから Mermaid ER diagram を生成します。",
       inputSchema: generateMermaidErDiagramInputSchema,
     },
     createGenerateMermaidErDiagramHandler(getParsedFile),
@@ -299,7 +299,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     {
       title: "Generate model files from configured A5:ER file",
       description:
-        "MCP サーバー起動時に指定された .a5er ファイルのテーブル定義から、Laravel Eloquent または SQLAlchemy 用のモデルファイル案を生成します。ファイルシステムには書き込みません。",
+        "experimental draft tool: MCP サーバー起動時に指定された .a5er ファイルのテーブル定義から、Laravel Eloquent または SQLAlchemy 用のモデルファイル案を生成します。ファイルシステムには書き込みません。",
       inputSchema: generateModelFilesInputSchema,
     },
     createGenerateModelFilesHandler(getParsedFile),
@@ -310,7 +310,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     {
       title: "Generate Markdown schema document from configured A5:ER file",
       description:
-        "MCP サーバー起動時に指定された .a5er ファイルのテーブル定義とリレーションから Markdown の定義書案を生成します。ファイルシステムには書き込みません。",
+        "experimental draft tool: MCP サーバー起動時に指定された .a5er ファイルのテーブル定義とリレーションから Markdown の定義書案を生成します。ファイルシステムには書き込みません。",
       inputSchema: generateSchemaMarkdownInputSchema,
     },
     createGenerateSchemaMarkdownHandler(getParsedFile),
@@ -354,7 +354,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     {
       title: "Generate migration plan from configured A5:ER file and live schema",
       description:
-        "MCP サーバー起動時に指定された .a5er ファイルと live schema JSON の差分から migration 案を生成します。DB には接続せず、実行もしません。",
+        "experimental draft tool: MCP サーバー起動時に指定された .a5er ファイルと live schema JSON の差分から migration 案を生成します。DB には接続せず、実行もしません。",
       inputSchema: generateMigrationPlanInputSchema,
     },
     createGenerateMigrationPlanHandler(getParsedFile),

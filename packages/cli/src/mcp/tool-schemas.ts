@@ -100,7 +100,7 @@ export const readA5sqlAssetInputSchema = {
     .max(20)
     .optional()
     .describe(
-      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS だけを使い、OS や home 由来の既定候補は読み取りません。",
     ),
   maxBytes: z
     .number()
@@ -130,7 +130,7 @@ export const listA5sqlConnectionsInputSchema = {
     .max(20)
     .optional()
     .describe(
-      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS だけを使い、OS や home 由来の既定候補は読み取りません。",
     ),
   limit: z.number().int().min(1).max(200).optional().describe("返す最大件数。省略時は 50。"),
   revealNonSecret: z
@@ -151,7 +151,7 @@ export const searchA5sqlAssetsInputSchema = {
     .max(20)
     .optional()
     .describe(
-      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS だけを使い、OS や home 由来の既定候補は読み取りません。",
     ),
   kinds: z
     .array(z.enum(["sql", "er", "config", "text", "database", "unknown"]))
@@ -193,7 +193,7 @@ export const parseA5sqlAssetInputSchema = {
     .max(20)
     .optional()
     .describe(
-      "探索対象 root。省略時は A5SQL_MCP_ROOTS や A5:SQL の既定候補から読み取り可能な場所を使います。",
+      "探索対象 root。省略時は A5SQL_MCP_ROOTS だけを使い、OS や home 由来の既定候補は読み取りません。",
     ),
   maxBytes: z
     .number()
