@@ -281,16 +281,16 @@ pnpm pack:check
 
 ## 開発者向けリリース確認
 
-0.9.6 のリリース候補として、通常の検証に加えて package として install した後の MCP 起動まで確認します。
+0.9.7 のリリース候補として、通常の検証に加えて package install 後の MCP 起動と、MCP クライアント経由の adversarial assertion を確認します。
 
-0.9.6 では、壊れたファイル、未知の A5:ER variant、文字コード不一致、巨大ファイル、prompt injection を含む本文を扱っても、parser / core / CLI / MCP output が安全側に倒れることを再確認します。unparseable な `.a5er` は正常な空 schema として扱いません。`parseStatus`、`a5er_structure_not_recognized`、`a5er_encoding_mismatch:<declared>:<decoded>`、`truncated`、`hasMore`、`contentIsUntrusted` を確認し、parser warning が出た場合は `read_a5sql_file` または `read_a5sql_asset` で先頭範囲、文字コード、ファイル形式を確認してください。
+0.9.7 では、hostile fixture を使い、`tools/list` と代表的な `callTool` の `structuredContent` を MCP クライアント経由で確認します。秘密情報マスク、`contentIsUntrusted`、`draftIsDerivedFromUntrustedInput`、`outputKind: "draft"`、`roots_required`、`Tools: (none)`、期待 tool 不足を検出し、MCP contract の退行を release 前に捕まえます。
 
 ```bash
 pnpm release:check
 pnpm published:check
 ```
 
-`published:check` は parser / core / cli の tarball を一時ディレクトリに install し、install 後の `a5sql-mcp --mcp example/schema.a5er` から `tools/list` を確認します。`Tools: (none)` や期待 tool の不足は失敗として扱います。
+`published:check` は parser / core / cli の tarball を一時ディレクトリに install し、install 後の `a5sql-mcp --mcp example/schema.a5er` から `tools/list` と最小限の adversarial `callTool` を確認します。`Tools: (none)`、期待 tool 不足、hostile fixture の秘密情報マスクや untrusted content signal の退行は失敗として扱います。
 
 ## 開発者向け実装 preflight
 

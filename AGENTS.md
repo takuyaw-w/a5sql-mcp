@@ -53,6 +53,8 @@
 
 0.9.6 の parser robustness では、壊れたファイルや prompt injection 風 payload を含むファイルでも、`warnings`、`message`、`code`、`nextAction` に A5:SQL 由来の文字列を混ぜないことを確認する。
 
+0.9.7 の MCP adversarial E2E では、直接 handler だけでなく MCP クライアント経由で `tools/list` / `callTool`、秘密情報マスク、`contentIsUntrusted`、draft disclosure、`roots_required` error を確認する。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。

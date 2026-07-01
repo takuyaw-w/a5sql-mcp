@@ -62,6 +62,7 @@ ROADMAP 実装や複数ファイルにまたがる実装では、implementation 
 - MCP tool/resource の出力例を確認し、AI が次の行動を取りやすい説明になっているか見る。
 - 実在する秘密情報や個人パスが差分に入っていないか確認する。
 - 0.9.0 以降の release candidate では、`rtk pnpm release:check` に加えて `rtk pnpm published:check` を実行し、tarball install 後の MCP startup と `tools/list` を確認する。
+- 0.9.7 の MCP adversarial E2E では、MCP client 経由で `tools/list`、代表的な `callTool`、秘密情報マスク、`contentIsUntrusted`、draft disclosure、`roots_required` error を確認する。
 
 ## 現在の MCP 構成
 

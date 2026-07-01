@@ -496,16 +496,18 @@ export function createParseA5sqlAssetHandler() {
     maxStatements?: number;
   }) => {
     if (!hasExplicitRoots(roots)) {
-      return jsonResult({
-        found: false,
-        assetId,
-        code: "roots_required",
-        message:
-          "assetId で解析する場合は、roots または A5SQL_MCP_ROOTS で探索 root を明示してください。",
-        warnings: ["roots_required"],
-        nextAction:
-          "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
-      });
+      return jsonResult(
+        withUntrustedPayloadContract({
+          found: false,
+          assetId,
+          code: "roots_required",
+          message:
+            "assetId で解析する場合は、roots または A5SQL_MCP_ROOTS で探索 root を明示してください。",
+          warnings: ["roots_required"],
+          nextAction:
+            "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
+        }),
+      );
     }
     const parsed = await parseA5sqlAsset({ roots, assetId, maxBytes });
     if (!parsed) {

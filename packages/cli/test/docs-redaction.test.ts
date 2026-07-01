@@ -31,7 +31,7 @@ describe("public documentation redaction audit", () => {
     }
   });
 
-  it("documents the 0.9.6 parser robustness release check", async () => {
+  it("documents the 0.9.7 MCP adversarial E2E release check", async () => {
     const docs = await Promise.all(
       PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
         relativePath,
@@ -40,16 +40,14 @@ describe("public documentation redaction audit", () => {
     );
     const readme = docs.find((doc) => doc.relativePath === "../../../README.md")?.text ?? "";
 
-    expect(readme).toContain("0.9.6");
-    expect(readme).toContain("壊れたファイル");
-    expect(readme).toContain("正常な空 schema として扱いません");
-    expect(readme).toContain("a5er_encoding_mismatch");
+    expect(readme).toContain("0.9.7");
+    expect(readme).toContain("MCP クライアント経由");
+    expect(readme).toContain("adversarial");
+    expect(readme).toContain("roots_required");
+    expect(readme).toContain("draftIsDerivedFromUntrustedInput");
 
     for (const { relativePath, text } of docs) {
-      expect(text, `${relativePath} should document parse status`).toContain("parseStatus");
-      expect(text, `${relativePath} should document unrecognized A5ER`).toContain(
-        "a5er_structure_not_recognized",
-      );
+      expect(text, `${relativePath} should document adversarial E2E`).toContain("adversarial");
       expect(text, `${relativePath} should document untrusted content`).toContain(
         "contentIsUntrusted",
       );
