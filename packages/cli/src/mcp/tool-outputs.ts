@@ -307,12 +307,8 @@ export function findA5sqlColumns(
     filePath: result.filePath,
     kind: result.kind,
     query,
-    tableNames: requestedTables,
     dataType: options.dataType,
-    filters: {
-      onlyPrimaryKeys: options.onlyPrimaryKeys === true,
-      onlyForeignKeyLike: options.onlyForeignKeyLike === true,
-    },
+    tableNames: requestedTables,
     totalColumnCount: matches.length,
     offset: page.offset,
     limit: page.limit,
