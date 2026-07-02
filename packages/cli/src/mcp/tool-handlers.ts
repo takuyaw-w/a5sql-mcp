@@ -724,8 +724,7 @@ export function createSuggestSchemaChangesHandler(getParsedFile: ParsedFileLoade
     jsonA5erToolResult({
       getParsedFile,
       notA5er: (parsed) => configuredFileIsNotA5erOutput(parsed),
-      unrecognized: (parsed) =>
-        unrecognizedA5erOutput(parsed, { found: false, suggestions: [] }),
+      unrecognized: (parsed) => unrecognizedA5erOutput(parsed, { found: false, suggestions: [] }),
       recognized: (parsed) => suggestSchemaChanges(parsed, { maxSuggestions, includeInfo }),
     });
 }
@@ -772,8 +771,7 @@ export function createGenerateMigrationPlanHandler(getParsedFile: ParsedFileLoad
     jsonA5erToolResult({
       getParsedFile,
       notA5er: (parsed) => configuredFileIsNotA5erOutput(parsed),
-      unrecognized: (parsed) =>
-        unrecognizedA5erOutput(parsed, { found: false, operations: [] }),
+      unrecognized: (parsed) => unrecognizedA5erOutput(parsed, { found: false, operations: [] }),
       recognized: (parsed) =>
         generateMigrationPlan(parsed, {
           liveSchema,

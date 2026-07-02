@@ -13,11 +13,7 @@ import {
   primaryKeyColumns,
   unrecognizedA5erResult,
 } from "./a5er-output-utils.js";
-import {
-  limitItems,
-  slicePage,
-  withUntrustedContentSignal,
-} from "./output-utils.js";
+import { limitItems, slicePage, withUntrustedContentSignal } from "./output-utils.js";
 import type { A5erCliResult, JsonObject } from "./types.js";
 export { compareA5erWithLiveSchema } from "./schema-compare/compare.js";
 export {

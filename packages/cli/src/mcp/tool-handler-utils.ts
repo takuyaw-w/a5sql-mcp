@@ -1,9 +1,5 @@
 import type { CliResult } from "../index.js";
-import {
-  isA5erParsed,
-  isRecognizedA5erParsed,
-  unrecognizedA5erResult,
-} from "./tool-outputs.js";
+import { isA5erParsed, isRecognizedA5erParsed, unrecognizedA5erResult } from "./tool-outputs.js";
 import type { A5erCliResult, JsonObject, ParsedFileLoader } from "./types.js";
 
 export function jsonResult<T extends JsonObject>(output: T) {
@@ -62,9 +58,6 @@ export function configuredFileIsNotA5erOutput(
   };
 }
 
-export function unrecognizedA5erOutput(
-  parsed: A5erCliResult,
-  extra: JsonObject = {},
-): JsonObject {
+export function unrecognizedA5erOutput(parsed: A5erCliResult, extra: JsonObject = {}): JsonObject {
   return unrecognizedA5erResult(parsed, extra);
 }

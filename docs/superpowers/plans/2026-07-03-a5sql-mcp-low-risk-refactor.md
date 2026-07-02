@@ -33,6 +33,7 @@
 ### Task 0: Worktree と preflight を準備する
 
 **Files:**
+
 - No source changes in this task.
 
 - [ ] **Step 1: main の状態を確認する**
@@ -81,6 +82,7 @@ Commit は不要。以後の task は worktree 内で実行する。
 ### Task 1: A5:ER fallback contract のテストを追加する
 
 **Files:**
+
 - Modify: `packages/cli/test/mcp-asset-tools.test.ts`
 
 - [ ] **Step 1: contract test を追加する**
@@ -153,6 +155,7 @@ Expected: test commit が 1 つ作成される。
 ### Task 2: handler 共通 helper を追加して A5:ER guard を集約する
 
 **Files:**
+
 - Create: `packages/cli/src/mcp/tool-handler-utils.ts`
 - Modify: `packages/cli/src/mcp/tool-handlers.ts`
 - Test: `packages/cli/test/mcp-asset-tools.test.ts`
@@ -163,11 +166,7 @@ Create `packages/cli/src/mcp/tool-handler-utils.ts`:
 
 ```ts
 import type { CliResult } from "../index.js";
-import {
-  isA5erParsed,
-  isRecognizedA5erParsed,
-  unrecognizedA5erResult,
-} from "./tool-outputs.js";
+import { isA5erParsed, isRecognizedA5erParsed, unrecognizedA5erResult } from "./tool-outputs.js";
 import type { A5erCliResult, JsonObject, ParsedFileLoader } from "./types.js";
 
 export function jsonResult<T extends JsonObject>(output: T) {
@@ -205,14 +204,11 @@ export async function jsonA5erToolResult({
   return jsonResult(recognized(parsed));
 }
 
-export function notA5erOutput(
-  parsed: CliResult,
-  extra: JsonObject,
-): JsonObject {
+export function notA5erOutput(parsed: CliResult, extra: JsonObject): JsonObject {
   return {
-    ...extra,
     filePath: parsed.filePath,
     kind: parsed.kind,
+    ...extra,
   };
 }
 
@@ -220,17 +216,16 @@ export function configuredFileIsNotA5erOutput(
   parsed: CliResult,
   extra: JsonObject = {},
 ): JsonObject {
-  return notA5erOutput(parsed, {
+  return {
     found: false,
+    filePath: parsed.filePath,
+    kind: parsed.kind,
     message: "configured_file_is_not_a5er",
     ...extra,
-  });
+  };
 }
 
-export function unrecognizedA5erOutput(
-  parsed: A5erCliResult,
-  extra: JsonObject = {},
-): JsonObject {
+export function unrecognizedA5erOutput(parsed: A5erCliResult, extra: JsonObject = {}): JsonObject {
   return unrecognizedA5erResult(parsed, extra);
 }
 ```
@@ -269,21 +264,21 @@ export function createListA5sqlTablesHandler(getParsedFile: ParsedFileLoader) {
 
 次の mapping で各 handler を置き換える。
 
-| Handler | notA5er output | unrecognized output | recognized output |
-|---|---|---|---|
-| `createDescribeA5sqlTableHandler` | `configuredFileIsNotA5erOutput(parsed, { tableName })` | `unrecognizedA5erOutput(parsed, { found: false, tableName })` | `describeA5sqlTable(parsed, { tableName })` |
-| `createExplainA5sqlTableHandler` | `configuredFileIsNotA5erOutput(parsed, { tableName })` | `unrecognizedA5erOutput(parsed, { found: false, tableName })` | `explainA5sqlTable(parsed, { tableName, maxRelatedTables })` |
-| `createListA5sqlRelationshipsHandler` | `notA5erOutput(parsed, { relationships: [] })` | `unrecognizedA5erOutput(parsed, { tableName, relationships: [] })` | `listA5sqlRelationships(parsed, { tableName })` |
-| `createFindA5sqlTablesHandler` | `notA5erOutput(parsed, { query, tables: [] })` | `unrecognizedA5erOutput(parsed, { query, tables: [] })` | `findA5sqlTables(parsed, { query, limit })` |
-| `createFindA5sqlColumnsHandler` | `notA5erOutput(parsed, { query, columns: [] })` | `unrecognizedA5erOutput(parsed, { query, columns: [] })` | `findA5sqlColumns(parsed, { query, tableNames, dataType, onlyPrimaryKeys, onlyForeignKeyLike, offset, limit })` |
-| `createGenerateSqlSelectHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false, tableName })` | `generateSqlSelect(parsed, { tableName, includeRelations, relatedTables, whereColumns, limit, maxRelatedTables })` |
-| `createGenerateMermaidErDiagramHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false })` | `generateMermaidErDiagram(parsed, { tableNames, includeViews, includeColumns, maxTables })` |
-| `createGenerateModelFilesHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false })` | `generateModelFiles(parsed, { framework, tableNames, maxTables })` |
-| `createReviewA5sqlSchemaHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false, issues: [] })` | `reviewA5sqlSchema(parsed, { maxIssues, includeInfo })` |
-| `createSuggestSchemaChangesHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false, suggestions: [] })` | `suggestSchemaChanges(parsed, { maxSuggestions, includeInfo })` |
-| `createCompareA5erWithLiveSchemaHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false, issues: [] })` | `compareA5erWithLiveSchema(parsed, { liveSchema, tableNames, compareDataTypes, compareNullable, comparePrimaryKeys, includeExtraLiveTables, maxIssues })` |
-| `createGenerateMigrationPlanHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false, operations: [] })` | `generateMigrationPlan(parsed, { liveSchema, tableNames, style, includeDestructive, maxOperations })` |
-| `createGenerateSchemaMarkdownHandler` | `configuredFileIsNotA5erOutput(parsed)` | `unrecognizedA5erOutput(parsed, { found: false, markdown: "" })` | `generateSchemaMarkdown(parsed, { tableNames, includeRelationships, includeViews, maxTables, maxColumnsPerTable })` |
+| Handler                                  | notA5er output                                  | unrecognized output                                                 | recognized output                                                                                                                                         |
+| ---------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createDescribeA5sqlTableHandler`        | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, tableName })`       | `describeA5sqlTable(parsed, { tableName })`                                                                                                               |
+| `createExplainA5sqlTableHandler`         | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, tableName })`       | `explainA5sqlTable(parsed, { tableName, maxRelatedTables })`                                                                                              |
+| `createListA5sqlRelationshipsHandler`    | `notA5erOutput(parsed, { relationships: [] })`  | `unrecognizedA5erOutput(parsed, { tableName, relationships: [] })`  | `listA5sqlRelationships(parsed, { tableName })`                                                                                                           |
+| `createFindA5sqlTablesHandler`           | `notA5erOutput(parsed, { query, tables: [] })`  | `unrecognizedA5erOutput(parsed, { query, tables: [] })`             | `findA5sqlTables(parsed, { query, limit })`                                                                                                               |
+| `createFindA5sqlColumnsHandler`          | `notA5erOutput(parsed, { query, columns: [] })` | `unrecognizedA5erOutput(parsed, { query, columns: [] })`            | `findA5sqlColumns(parsed, { query, tableNames, dataType, onlyPrimaryKeys, onlyForeignKeyLike, offset, limit })`                                           |
+| `createGenerateSqlSelectHandler`         | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, tableName })`       | `generateSqlSelect(parsed, { tableName, includeRelations, relatedTables, whereColumns, limit, maxRelatedTables })`                                        |
+| `createGenerateMermaidErDiagramHandler`  | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false })`                  | `generateMermaidErDiagram(parsed, { tableNames, includeViews, includeColumns, maxTables })`                                                               |
+| `createGenerateModelFilesHandler`        | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false })`                  | `generateModelFiles(parsed, { framework, tableNames, maxTables })`                                                                                        |
+| `createReviewA5sqlSchemaHandler`         | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, issues: [] })`      | `reviewA5sqlSchema(parsed, { maxIssues, includeInfo })`                                                                                                   |
+| `createSuggestSchemaChangesHandler`      | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, suggestions: [] })` | `suggestSchemaChanges(parsed, { maxSuggestions, includeInfo })`                                                                                           |
+| `createCompareA5erWithLiveSchemaHandler` | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, issues: [] })`      | `compareA5erWithLiveSchema(parsed, { liveSchema, tableNames, compareDataTypes, compareNullable, comparePrimaryKeys, includeExtraLiveTables, maxIssues })` |
+| `createGenerateMigrationPlanHandler`     | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, operations: [] })`  | `generateMigrationPlan(parsed, { liveSchema, tableNames, style, includeDestructive, maxOperations })`                                                     |
+| `createGenerateSchemaMarkdownHandler`    | `configuredFileIsNotA5erOutput(parsed)`         | `unrecognizedA5erOutput(parsed, { found: false, markdown: "" })`    | `generateSchemaMarkdown(parsed, { tableNames, includeRelationships, includeViews, maxTables, maxColumnsPerTable })`                                       |
 
 例として `createGenerateSqlSelectHandler` は次の形にする。
 
@@ -357,6 +352,7 @@ Expected: handler helper commit が 1 つ作成される。
 ### Task 3: output 共通 helper を追加して paging と untrusted wrapper を集約する
 
 **Files:**
+
 - Create: `packages/cli/src/mcp/output-utils.ts`
 - Modify: `packages/cli/src/mcp/tool-outputs.ts`
 - Test: `packages/cli/test/mcp-tools.test.ts`
@@ -420,11 +416,7 @@ export function limitItems<T>(
 Remove local `withUntrustedContentSignal` and import:
 
 ```ts
-import {
-  limitItems,
-  slicePage,
-  withUntrustedContentSignal,
-} from "./output-utils.js";
+import { limitItems, slicePage, withUntrustedContentSignal } from "./output-utils.js";
 ```
 
 Remove direct `withUntrustedPayloadContract` import from `tool-outputs.ts`.
@@ -461,12 +453,8 @@ return withUntrustedContentSignal({
   filePath: result.filePath,
   kind: result.kind,
   query,
-  tableNames: options.tableNames ?? null,
-  dataType: options.dataType ?? null,
-  filters: {
-    onlyPrimaryKeys: options.onlyPrimaryKeys === true,
-    onlyForeignKeyLike: options.onlyForeignKeyLike === true,
-  },
+  dataType: options.dataType,
+  tableNames: requestedTables,
   totalColumnCount: matches.length,
   offset: page.offset,
   limit: page.limit,
@@ -524,6 +512,7 @@ Expected: output helper commit が 1 つ作成される。
 ### Task 4: generation-tools を変更対象外として確認する
 
 **Files:**
+
 - Test: `packages/cli/test/mcp-tools.test.ts`
 
 - [ ] **Step 1: diff を確認する**
@@ -571,6 +560,7 @@ Expected: Task 4 由来の unstaged/staged changes がない。`generation-tools
 ### Task 5: 全体検証と final commit 状態を確認する
 
 **Files:**
+
 - No planned source changes.
 
 - [ ] **Step 1: format check を実行する**
