@@ -307,8 +307,8 @@ export function findA5sqlColumns(
     filePath: result.filePath,
     kind: result.kind,
     query,
-    tableNames: options.tableNames ?? null,
-    dataType: options.dataType ?? null,
+    tableNames: requestedTables,
+    dataType: options.dataType,
     filters: {
       onlyPrimaryKeys: options.onlyPrimaryKeys === true,
       onlyForeignKeyLike: options.onlyForeignKeyLike === true,
