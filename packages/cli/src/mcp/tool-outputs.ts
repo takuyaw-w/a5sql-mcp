@@ -13,7 +13,11 @@ import {
   primaryKeyColumns,
   unrecognizedA5erResult,
 } from "./a5er-output-utils.js";
-import { withUntrustedPayloadContract } from "./output-contract.js";
+import {
+  limitItems,
+  slicePage,
+  withUntrustedContentSignal,
+} from "./output-utils.js";
 import type { A5erCliResult, JsonObject } from "./types.js";
 export { compareA5erWithLiveSchema } from "./schema-compare/compare.js";
 export {
@@ -34,10 +38,6 @@ const DEFAULT_MERMAID_TABLE_LIMIT = 100;
 const DEFAULT_JOIN_TABLE_LIMIT = 10;
 const DEFAULT_COLUMN_SEARCH_LIMIT = 100;
 const DEFAULT_SCHEMA_SUGGESTION_LIMIT = 100;
-
-function withUntrustedContentSignal(output: JsonObject): JsonObject {
-  return withUntrustedPayloadContract(output);
-}
 
 export function listA5sqlRelationships(
   result: A5erCliResult,
@@ -75,20 +75,20 @@ export function listA5sqlTables(
   if (!isRecognizedA5erParsed(result)) {
     return withUntrustedContentSignal(unrecognizedA5erResult(result, { tables: [] }));
   }
-  const start = options.offset ?? 0;
-  const count = options.limit ?? DEFAULT_TABLE_LIST_LIMIT;
-  const tables = result.parsed.tables.slice(start, start + count);
-  const hasMore = start + tables.length < result.parsed.tables.length;
+  const page = slicePage(result.parsed.tables, {
+    offset: options.offset,
+    limit: options.limit ?? DEFAULT_TABLE_LIST_LIMIT,
+  });
   return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
-    totalTableCount: result.parsed.tables.length,
-    offset: start,
-    limit: count,
-    returnedTableCount: tables.length,
-    hasMore,
-    truncated: hasMore,
-    tables: tables.map(tableSummary),
+    totalTableCount: page.totalCount,
+    offset: page.offset,
+    limit: page.limit,
+    returnedTableCount: page.returnedCount,
+    hasMore: page.hasMore,
+    truncated: page.truncated,
+    tables: page.items.map(tableSummary),
   });
 }
 
@@ -301,7 +301,7 @@ export function findA5sqlColumns(
   });
   const offset = options.offset ?? 0;
   const limit = options.limit ?? DEFAULT_COLUMN_SEARCH_LIMIT;
-  const page = matches.slice(offset, offset + limit);
+  const page = slicePage(matches, { offset, limit });
 
   return withUntrustedContentSignal({
     filePath: result.filePath,
@@ -310,12 +310,12 @@ export function findA5sqlColumns(
     dataType: options.dataType,
     tableNames: requestedTables,
     totalColumnCount: matches.length,
-    offset,
-    limit,
-    returnedColumnCount: page.length,
-    hasMore: offset + page.length < matches.length,
-    truncated: offset + page.length < matches.length,
-    columns: page.map(({ table, column, matchedBy }) => ({
+    offset: page.offset,
+    limit: page.limit,
+    returnedColumnCount: page.returnedCount,
+    hasMore: page.hasMore,
+    truncated: page.truncated,
+    columns: page.items.map(({ table, column, matchedBy }) => ({
       table: table.name,
       tableLogicalName: table.logicalName,
       name: column.name,
@@ -353,7 +353,7 @@ export function suggestSchemaChanges(
   const suggestions = review.issues
     .map(schemaReviewIssueToSuggestion)
     .filter((suggestion): suggestion is JsonObject => suggestion !== undefined);
-  const limitedSuggestions = suggestions.slice(0, maxSuggestions);
+  const limitedSuggestions = limitItems(suggestions, maxSuggestions);
 
   return withUntrustedContentSignal({
     filePath: result.filePath,
@@ -362,11 +362,11 @@ export function suggestSchemaChanges(
     relationshipCount: result.parsed.relationships.length,
     issueCount: review.issueCount,
     suggestionCount: suggestions.length,
-    returnedSuggestionCount: limitedSuggestions.length,
+    returnedSuggestionCount: limitedSuggestions.returnedCount,
     maxSuggestions,
-    truncated: suggestions.length > limitedSuggestions.length,
+    truncated: limitedSuggestions.truncated,
     summary: review.summary,
-    suggestions: limitedSuggestions,
+    suggestions: limitedSuggestions.items,
     nextAction: "提案は設計レビュー用です。A5:ER ファイル、DB、生成ファイルには書き込みません。",
   });
 }
@@ -549,16 +549,16 @@ export function reviewA5sqlSchema(
   }
 
   const filteredIssues = includeInfo ? issues : issues.filter((issue) => issue.severity !== "info");
-  const limitedIssues = filteredIssues.slice(0, maxIssues);
+  const limitedIssues = limitItems(filteredIssues, maxIssues);
   return withUntrustedContentSignal({
     filePath: result.filePath,
     kind: result.kind,
     tableCount: result.parsed.tables.length,
     relationshipCount: result.parsed.relationships.length,
     issueCount: filteredIssues.length,
-    truncated: filteredIssues.length > limitedIssues.length,
+    truncated: limitedIssues.truncated,
     summary: summarizeIssues(filteredIssues),
-    issues: limitedIssues,
+    issues: limitedIssues.items,
   });
 }
 
