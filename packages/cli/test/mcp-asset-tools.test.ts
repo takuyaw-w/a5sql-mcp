@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { parseFile } from "../src/index.js";
 import {
+  createGenerateSqlSelectHandler,
+  createListA5sqlTablesHandler,
   createParseA5sqlFileHandler,
   createReadA5sqlFileHandler,
 } from "../src/mcp/tool-handlers.js";
@@ -109,6 +111,33 @@ describe("A5:SQL asset MCP tools", () => {
     expect(serialized).toContain("***");
     expect(serialized).not.toContain("text-api-key");
     expect(serialized).not.toContain("raw-private-key-material");
+  });
+
+  it("keeps stable fallback responses for A5:ER-only handlers on non-A5ER files", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "queries", "plain.sql");
+    await mkdir(path.dirname(sqlPath), { recursive: true });
+    await writeFile(sqlPath, "select 1 as value;", "utf8");
+
+    const parsed = await parseFile(sqlPath);
+    const getParsedFile = async () => parsed;
+
+    const tables = await createListA5sqlTablesHandler(getParsedFile)({});
+    const select = await createGenerateSqlSelectHandler(getParsedFile)({
+      tableName: "users",
+    });
+
+    expect(tables.structuredContent).toEqual({
+      filePath: sqlPath,
+      kind: "sql",
+      tables: [],
+    });
+    expect(select.structuredContent).toEqual({
+      found: false,
+      filePath: sqlPath,
+      kind: "sql",
+      message: "configured_file_is_not_a5er",
+    });
   });
 
   it("detects A5:SQL locations from explicit roots", async () => {
