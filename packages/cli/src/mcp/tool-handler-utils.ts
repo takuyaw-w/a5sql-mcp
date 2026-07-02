@@ -43,9 +43,9 @@ export async function jsonA5erToolResult({
 
 export function notA5erOutput(parsed: CliResult, extra: JsonObject): JsonObject {
   return {
-    ...extra,
     filePath: parsed.filePath,
     kind: parsed.kind,
+    ...extra,
   };
 }
 
@@ -53,11 +53,13 @@ export function configuredFileIsNotA5erOutput(
   parsed: CliResult,
   extra: JsonObject = {},
 ): JsonObject {
-  return notA5erOutput(parsed, {
+  return {
     found: false,
+    filePath: parsed.filePath,
+    kind: parsed.kind,
     message: "configured_file_is_not_a5er",
     ...extra,
-  });
+  };
 }
 
 export function unrecognizedA5erOutput(

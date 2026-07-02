@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { parseFile } from "../src/index.js";
 import {
+  createDescribeA5sqlTableHandler,
+  createExplainA5sqlTableHandler,
   createGenerateSqlSelectHandler,
   createListA5sqlTablesHandler,
   createParseA5sqlFileHandler,
@@ -123,21 +125,32 @@ describe("A5:SQL asset MCP tools", () => {
     const getParsedFile = async () => parsed;
 
     const tables = await createListA5sqlTablesHandler(getParsedFile)({});
+    const describeTable = await createDescribeA5sqlTableHandler(getParsedFile)({
+      tableName: "users",
+    });
+    const explainTable = await createExplainA5sqlTableHandler(getParsedFile)({
+      tableName: "users",
+    });
     const select = await createGenerateSqlSelectHandler(getParsedFile)({
       tableName: "users",
     });
-
-    expect(tables.structuredContent).toEqual({
+    const expectedTablesOutput = {
       filePath: sqlPath,
       kind: "sql",
       tables: [],
-    });
-    expect(select.structuredContent).toEqual({
+    };
+    const expectedConfiguredFileIsNotA5erOutput = {
       found: false,
       filePath: sqlPath,
       kind: "sql",
       message: "configured_file_is_not_a5er",
-    });
+    };
+
+    expect(tables.structuredContent).toEqual(expectedTablesOutput);
+    expect(tables.content[0].text).toBe(JSON.stringify(expectedTablesOutput, null, 2));
+    expect(describeTable.structuredContent).toEqual(expectedConfiguredFileIsNotA5erOutput);
+    expect(explainTable.structuredContent).toEqual(expectedConfiguredFileIsNotA5erOutput);
+    expect(select.structuredContent).toEqual(expectedConfiguredFileIsNotA5erOutput);
   });
 
   it("detects A5:SQL locations from explicit roots", async () => {

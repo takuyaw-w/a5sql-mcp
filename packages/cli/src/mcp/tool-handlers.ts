@@ -550,7 +550,7 @@ export function createDescribeA5sqlTableHandler(getParsedFile: ParsedFileLoader)
   return async ({ tableName }: { tableName: string }) =>
     jsonA5erToolResult({
       getParsedFile,
-      notA5er: (parsed) => configuredFileIsNotA5erOutput(parsed, { tableName }),
+      notA5er: (parsed) => configuredFileIsNotA5erOutput(parsed),
       unrecognized: (parsed) => unrecognizedA5erOutput(parsed, { found: false, tableName }),
       recognized: (parsed) => describeA5sqlTable(parsed, { tableName }),
     });
@@ -566,7 +566,7 @@ export function createExplainA5sqlTableHandler(getParsedFile: ParsedFileLoader) 
   }) =>
     jsonA5erToolResult({
       getParsedFile,
-      notA5er: (parsed) => configuredFileIsNotA5erOutput(parsed, { tableName }),
+      notA5er: (parsed) => configuredFileIsNotA5erOutput(parsed),
       unrecognized: (parsed) => unrecognizedA5erOutput(parsed, { found: false, tableName }),
       recognized: (parsed) => explainA5sqlTable(parsed, { tableName, maxRelatedTables }),
     });
