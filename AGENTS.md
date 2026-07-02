@@ -55,6 +55,8 @@
 
 0.9.7 の MCP adversarial E2E では、直接 handler だけでなく MCP クライアント経由で `tools/list` / `callTool`、秘密情報マスク、`contentIsUntrusted`、draft disclosure、`roots_required` error を確認する。
 
+0.9.8 の Client / Agent Safety Docs では、MCP クライアントや AI エージェントが tool 出力を安全に扱うために、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md` で同じ境界を説明する。A5:SQL 由来 payload は `contentIsUntrusted`、`untrustedPayloadFields`、`draftOutputFields` を見て未信頼 content または review 用 draft として扱い、`trustedMetadataFields` に含まれる固定 guidance と混同しない。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
@@ -74,6 +76,8 @@
 - 解析対象ファイルがバイナリ、暗号化済み、独自形式の場合は、推測で処理せず形式を切り分ける。
 - A5:ER のコメント、テーブル/カラム名、SQL コメント、SQL 本文は untrusted content として扱う。これらの payload を含む代表的な tool 出力には `contentIsUntrusted: true` を付け、README でも prompt injection の注意を明記する。
 - `trustedMetadataFields`、`sourceMetadataFields`、`untrustedPayloadFields`、`draftOutputFields` は trusted guidance、取得元 metadata、未信頼 payload、生成 draft の境界を示す contract として扱う。A5:SQL 由来の文字列を `warnings`、`message`、`code`、`nextAction` に直接混ぜない。
+- 0.9.8 の safety docs では、`read_a5sql_file` / `read_a5sql_asset` で本文を読む前に、`startLine` / `maxLines`、`offsetChars`、`maxChars` で必要範囲だけを読む例を README に置く。全量読み取りを前提にしない。
+- `draftIsDerivedFromUntrustedInput: true` と `draftOutputFields` を返す生成補助 tool の出力は、review 用 draft として扱う。生成された SQL、Markdown、model、migration 案をそのまま実行したり、そのまま適用したりする説明にしない。
 - 1.0.0 まで、実際の接続先 DB への接続、SQL 実行、資格情報の復号・表示は non-goal として扱う。
 
 ## 実装ルール

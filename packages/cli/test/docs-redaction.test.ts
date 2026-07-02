@@ -71,4 +71,44 @@ describe("public documentation redaction audit", () => {
       expect(text, `${relativePath} should document explicit approval`).toContain("明示");
     }
   });
+
+  it("documents the 0.9.8 client and agent safety guidance", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+    const readme = docs.find((doc) => doc.relativePath === "../../../README.md")?.text ?? "";
+
+    expect(readme).toContain("MCP クライアント / AI エージェント向け安全ガイド");
+    expect(readme).toContain("read_a5sql_file");
+    expect(readme).toContain("startLine");
+    expect(readme).toContain("maxLines");
+    expect(readme).toContain("offsetChars");
+    expect(readme).toContain("read_a5sql_asset");
+    expect(readme).toContain("maxChars");
+    expect(readme).toContain("そのまま実行");
+    expect(readme).toContain("そのまま適用");
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.9.8 safety docs`).toContain("0.9.8");
+      expect(text, `${relativePath} should document contentIsUntrusted`).toContain(
+        "contentIsUntrusted",
+      );
+      expect(text, `${relativePath} should document trusted metadata`).toContain(
+        "trustedMetadataFields",
+      );
+      expect(text, `${relativePath} should document untrusted payload`).toContain(
+        "untrustedPayloadFields",
+      );
+      expect(text, `${relativePath} should document draft output`).toContain("draftOutputFields");
+      expect(text, `${relativePath} should document draft disclosure`).toContain(
+        "draftIsDerivedFromUntrustedInput",
+      );
+      expect(text, `${relativePath} should document root minimum privilege`).toContain(
+        "A5SQL_MCP_ROOTS",
+      );
+    }
+  });
 });
