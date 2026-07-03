@@ -110,4 +110,49 @@ describe("public documentation redaction audit", () => {
       );
     }
   });
+
+  it("documents the 0.9.9 API freeze tool classification", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+    const readme = docs.find((doc) => doc.relativePath === "../../../README.md")?.text ?? "";
+    const stableSection = readme.slice(
+      readme.indexOf("### 安定 read-only tool"),
+      readme.indexOf("### 生成補助 tool"),
+    );
+    const draftSection = readme.slice(
+      readme.indexOf("### 生成補助 tool"),
+      readme.indexOf("大きな `.a5er`"),
+    );
+
+    expect(readme).toContain("0.9.9 API Freeze Rehearsal");
+    expect(stableSection).toContain("review_a5sql_schema");
+    expect(stableSection).toContain("suggest_schema_changes");
+    expect(stableSection).toContain("compare_a5er_with_live_schema");
+    expect(draftSection).not.toContain("review_a5sql_schema");
+    expect(draftSection).not.toContain("suggest_schema_changes");
+    expect(draftSection).not.toContain("compare_a5er_with_live_schema");
+    expect(draftSection).toContain("generate_sql_select");
+    expect(draftSection).toContain("generate_mermaid_er_diagram");
+    expect(draftSection).toContain("generate_model_files");
+    expect(draftSection).toContain("generate_schema_markdown");
+    expect(draftSection).toContain("generate_migration_plan");
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.9.9`).toContain("0.9.9");
+      expect(text, `${relativePath} should document API freeze`).toContain("API Freeze");
+      expect(text, `${relativePath} should document experimental draft tools`).toContain(
+        "experimental draft",
+      );
+      expect(text, `${relativePath} should document review as stable`).toContain(
+        "review_a5sql_schema",
+      );
+      expect(text, `${relativePath} should document comparison as stable`).toContain(
+        "compare_a5er_with_live_schema",
+      );
+    }
+  });
 });

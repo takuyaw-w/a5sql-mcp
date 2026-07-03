@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
 
 describe("A5:SQL MCP server smoke", () => {
-  it("reports 0.9.8 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.8");
+  it("reports 0.9.9 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.9");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -26,11 +26,107 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.9.8",
-      "0.9.8",
-      "0.9.8",
-      "0.9.8",
+      "0.9.9",
+      "0.9.9",
+      "0.9.9",
+      "0.9.9",
     ]);
+  });
+
+  it("freezes the 0.9.9 MCP API surface", async () => {
+    const root = path.join(os.tmpdir(), `a5sql-mcp-api-freeze-${randomUUID()}`);
+    const filePath = path.join(root, "schema.a5er");
+    await mkdir(root, { recursive: true });
+    await writeFile(
+      filePath,
+      [
+        "# A5:ER FORMAT:19",
+        "[Entity]",
+        "PName=users",
+        'Field="ID","id","Integer","NOT NULL",0,"","",$FFFFFFFF,""',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const stableReadOnlyTools = [
+      "describe_a5sql_file",
+      "parse_a5sql_file",
+      "read_a5sql_file",
+      "detect_a5sql_locations",
+      "read_a5sql_asset",
+      "list_a5sql_connections",
+      "search_a5sql_assets",
+      "parse_a5sql_asset",
+      "list_a5sql_tables",
+      "describe_a5sql_table",
+      "explain_a5sql_table",
+      "list_a5sql_relationships",
+      "find_a5sql_tables",
+      "find_a5sql_columns",
+      "review_a5sql_schema",
+      "suggest_schema_changes",
+      "compare_a5er_with_live_schema",
+    ];
+    const experimentalDraftTools = [
+      "generate_sql_select",
+      "generate_mermaid_er_diagram",
+      "generate_model_files",
+      "generate_schema_markdown",
+      "generate_migration_plan",
+    ];
+    const expectedToolNames = [...stableReadOnlyTools, ...experimentalDraftTools];
+
+    const server = await createA5sqlMcpServer({ fileArg: filePath });
+    const client = new Client({ name: "a5sql-mcp-test", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+      const tools = await client.listTools();
+      const toolsByName = new Map(tools.tools.map((tool) => [tool.name, tool]));
+
+      expect(tools.tools.map((tool) => tool.name).sort()).toEqual([...expectedToolNames].sort());
+      for (const toolName of expectedToolNames) {
+        const tool = toolsByName.get(toolName);
+        expect(tool, `${toolName} should be registered`).toBeDefined();
+        expect(tool?.description, `${toolName} should have a description`).toEqual(
+          expect.any(String),
+        );
+        expect(tool?.inputSchema, `${toolName} should expose an input schema`).toEqual(
+          expect.any(Object),
+        );
+      }
+      for (const toolName of stableReadOnlyTools) {
+        expect(toolsByName.get(toolName)?.description ?? "").not.toContain(
+          "experimental draft tool",
+        );
+      }
+      for (const toolName of experimentalDraftTools) {
+        expect(toolsByName.get(toolName)?.description ?? "").toContain("experimental draft tool");
+      }
+
+      const selectResult = await client.callTool({
+        name: "generate_sql_select",
+        arguments: { tableName: "users", limit: 10 },
+      });
+
+      expect(selectResult.structuredContent).toMatchObject({
+        outputKind: "draft",
+        readOnly: true,
+        writesToFileSystem: false,
+        connectsToDatabase: false,
+        executesSql: false,
+        draftIsDerivedFromUntrustedInput: true,
+        contentIsUntrusted: true,
+      });
+      expect(selectResult.structuredContent?.draftOutputFields).toEqual(
+        expect.arrayContaining(["sql"]),
+      );
+    } finally {
+      await Promise.allSettled([client.close(), server.close()]);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("lists current tools and returns representative structuredContent contracts", async () => {

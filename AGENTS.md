@@ -57,6 +57,8 @@
 
 0.9.8 の Client / Agent Safety Docs では、MCP クライアントや AI エージェントが tool 出力を安全に扱うために、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md` で同じ境界を説明する。A5:SQL 由来 payload は `contentIsUntrusted`、`untrustedPayloadFields`、`draftOutputFields` を見て未信頼 content または review 用 draft として扱い、`trustedMetadataFields` に含まれる固定 guidance と混同しない。
 
+0.9.9 の API Freeze Rehearsal では、`.a5er` 起動時の `tools/list` を基準に tool 名、description、input schema、stable read-only / experimental draft の分類を固定する。`review_a5sql_schema`、`suggest_schema_changes`、`compare_a5er_with_live_schema` は stable read-only の分析・比較 tool として扱い、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` は experimental draft tool として扱う。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
