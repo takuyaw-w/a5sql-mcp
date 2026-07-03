@@ -160,6 +160,7 @@ material.
    ```
 
    Use full or log mode only when default output omits necessary evidence.
+
 4. Compare evidence across sessions. Note agreements, conflicts, stale results,
    missing raw sources, and gaps where searches did not find evidence.
 5. Produce the report as agent synthesis with citations.
