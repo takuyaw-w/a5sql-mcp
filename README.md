@@ -320,9 +320,9 @@ pnpm pack:check
 
 ## 開発者向けリリース確認
 
-0.9.7 のリリース候補として、通常の検証に加えて package install 後の MCP 起動と、MCP クライアント経由の adversarial assertion を確認します。
+リリース候補では、通常の検証に加えて package install 後の MCP 起動と、MCP クライアント経由の adversarial assertion を確認します。
 
-0.9.7 では、hostile fixture を使い、`tools/list` と代表的な `callTool` の `structuredContent` を MCP クライアント経由で確認します。秘密情報マスク、`contentIsUntrusted`、`draftIsDerivedFromUntrustedInput`、`outputKind: "draft"`、`roots_required`、`Tools: (none)`、期待 tool 不足を検出し、MCP contract の退行を release 前に捕まえます。
+hostile fixture を使い、`tools/list` と代表的な `callTool` の `structuredContent` を MCP クライアント経由で確認します。秘密情報マスク、`contentIsUntrusted`、`draftIsDerivedFromUntrustedInput`、`outputKind: "draft"`、`roots_required`、`Tools: (none)`、期待 tool 不足を検出し、MCP contract の退行を release 前に捕まえます。
 
 ```bash
 pnpm release:check

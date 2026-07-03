@@ -31,7 +31,7 @@ describe("public documentation redaction audit", () => {
     }
   });
 
-  it("documents the 0.9.7 MCP adversarial E2E release check", async () => {
+  it("documents the MCP adversarial E2E release check", async () => {
     const docs = await Promise.all(
       PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
         relativePath,
@@ -40,7 +40,6 @@ describe("public documentation redaction audit", () => {
     );
     const readme = docs.find((doc) => doc.relativePath === "../../../README.md")?.text ?? "";
 
-    expect(readme).toContain("0.9.7");
     expect(readme).toContain("MCP クライアント経由");
     expect(readme).toContain("adversarial");
     expect(readme).toContain("roots_required");

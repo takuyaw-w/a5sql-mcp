@@ -58,7 +58,7 @@ export type McpServerOptions = {
   fileArg: string;
 };
 
-export const A5SQL_MCP_SERVER_VERSION = "0.9.7";
+export const A5SQL_MCP_SERVER_VERSION = "0.9.8";
 
 export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void> {
   const server = await createA5sqlMcpServer({ fileArg });
