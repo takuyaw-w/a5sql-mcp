@@ -66,7 +66,7 @@ export type McpServerOptions = {
   toolProfile?: ToolProfile;
 };
 
-export const A5SQL_MCP_SERVER_VERSION = "0.10.0";
+export const A5SQL_MCP_SERVER_VERSION = "0.10.1";
 
 type ToolRegistrationConfig<
   OutputArgs extends ZodRawShapeCompat | AnySchema,
