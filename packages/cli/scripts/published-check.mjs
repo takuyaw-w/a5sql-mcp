@@ -34,6 +34,31 @@ const EXPECTED_TOOL_NAMES = [
   "suggest_schema_changes",
 ].sort();
 
+const CORE_READ_TOOL_NAMES = [
+  "describe_a5sql_file",
+  "detect_a5sql_locations",
+  "list_a5sql_connections",
+  "parse_a5sql_asset",
+  "parse_a5sql_file",
+  "read_a5sql_asset",
+  "read_a5sql_file",
+  "search_a5sql_assets",
+].sort();
+
+const SCHEMA_EXPLORE_ONLY_TOOL_NAMES = [
+  "describe_a5sql_table",
+  "explain_a5sql_table",
+  "find_a5sql_columns",
+  "find_a5sql_tables",
+  "list_a5sql_relationships",
+  "list_a5sql_tables",
+].sort();
+
+const SCHEMA_EXPLORE_TOOL_NAMES = [
+  ...CORE_READ_TOOL_NAMES,
+  ...SCHEMA_EXPLORE_ONLY_TOOL_NAMES,
+].sort();
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../../..");
 
@@ -85,21 +110,23 @@ async function main() {
 
     const toolsResult = await client.listTools();
     const actualToolNames = toolsResult.tools.map((tool) => tool.name).sort();
-    const missing = EXPECTED_TOOL_NAMES.filter((toolName) => !actualToolNames.includes(toolName));
-    const unexpected = actualToolNames.filter(
-      (toolName) => !EXPECTED_TOOL_NAMES.includes(toolName),
-    );
+    assertToolSet("default published-style MCP tools/list", actualToolNames, EXPECTED_TOOL_NAMES);
 
-    if (missing.length > 0 || unexpected.length > 0) {
-      throw new Error(
-        [
-          "Published-style MCP tools/list did not match the expected tool set.",
-          `Missing: ${missing.length > 0 ? missing.join(", ") : "(none)"}`,
-          `Unexpected: ${unexpected.length > 0 ? unexpected.join(", ") : "(none)"}`,
-          `Actual: ${actualToolNames.join(", ")}`,
-        ].join("\n"),
-      );
-    }
+    await assertInstalledBinToolProfile(binPath, tempRoot, sampleA5er, {
+      label: "--tool-profile all published-style MCP tools/list",
+      extraArgs: ["--tool-profile", "all"],
+      expectedToolNames: EXPECTED_TOOL_NAMES,
+    });
+    await assertInstalledBinToolProfile(binPath, tempRoot, sampleA5er, {
+      label: "--tool-profile core-read published-style MCP tools/list",
+      extraArgs: ["--tool-profile", "core-read"],
+      expectedToolNames: CORE_READ_TOOL_NAMES,
+    });
+    await assertInstalledBinToolProfile(binPath, tempRoot, sampleA5er, {
+      label: "--tool-profile schema-explore published-style MCP tools/list",
+      extraArgs: ["--tool-profile", "schema-explore"],
+      expectedToolNames: SCHEMA_EXPLORE_TOOL_NAMES,
+    });
 
     const adversarialRoot = path.join(tempRoot, "adversarial-root");
     const hostileSqlPath = path.join(adversarialRoot, "queries", "hostile.sql");
@@ -180,6 +207,51 @@ function runPnpm(args, cwd) {
   }
 
   return result.stdout;
+}
+
+function assertToolSet(label, actualToolNames, expectedToolNames) {
+  const actual = [...actualToolNames].sort();
+  const expected = [...expectedToolNames].sort();
+  const missing = expected.filter((toolName) => !actual.includes(toolName));
+  const unexpected = actual.filter((toolName) => !expected.includes(toolName));
+
+  if (missing.length > 0 || unexpected.length > 0) {
+    throw new Error(
+      [
+        `${label} did not match the expected tool set.`,
+        `Missing: ${missing.length > 0 ? missing.join(", ") : "(none)"}`,
+        `Unexpected: ${unexpected.length > 0 ? unexpected.join(", ") : "(none)"}`,
+        `Actual: ${actual.join(", ")}`,
+      ].join("\n"),
+    );
+  }
+}
+
+async function assertInstalledBinToolProfile(
+  binPath,
+  cwd,
+  sampleA5er,
+  { label, extraArgs, expectedToolNames },
+) {
+  const actualToolNames = await listInstalledBinToolNames(binPath, cwd, sampleA5er, extraArgs);
+  assertToolSet(label, actualToolNames, expectedToolNames);
+}
+
+async function listInstalledBinToolNames(binPath, cwd, sampleA5er, extraArgs = []) {
+  const transport = new StdioClientTransport({
+    command: binPath,
+    args: ["--mcp", sampleA5er, ...extraArgs],
+    cwd,
+  });
+  const client = new Client({ name: "a5sql-mcp-published-profile-check", version: "0.0.0" });
+
+  try {
+    await client.connect(transport);
+    const toolsResult = await client.listTools();
+    return toolsResult.tools.map((tool) => tool.name).sort();
+  } finally {
+    await client.close();
+  }
 }
 
 async function assertPublishedPackageClientMatrix(
