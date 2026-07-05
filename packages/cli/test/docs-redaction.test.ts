@@ -155,4 +155,27 @@ describe("public documentation redaction audit", () => {
       );
     }
   });
+
+  it("documents the 0.9.10 preflight contract audit", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.9.10`).toContain("0.9.10");
+      expect(text, `${relativePath} should document preflight contract audit`).toContain(
+        "Preflight Contract Audit",
+      );
+      expect(text, `${relativePath} should document contract drift`).toContain("contract drift");
+      expect(text, `${relativePath} should keep tools/list as source of truth`).toContain(
+        "tools/list",
+      );
+      expect(text, `${relativePath} should document experimental draft marker`).toContain(
+        "experimental draft tool",
+      );
+    }
+  });
 });

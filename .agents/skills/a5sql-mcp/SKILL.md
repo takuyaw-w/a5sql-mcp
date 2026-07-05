@@ -65,6 +65,7 @@ ROADMAP 実装や複数ファイルにまたがる実装では、implementation 
 - 0.9.7 の MCP adversarial E2E では、MCP client 経由で `tools/list`、代表的な `callTool`、秘密情報マスク、`contentIsUntrusted`、draft disclosure、`roots_required` error を確認する。
 - 0.9.8 の Client / Agent Safety Docs では、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md` が同じ安全境界を説明しているか確認する。`contentIsUntrusted`、`trustedMetadataFields`、`untrustedPayloadFields`、`draftOutputFields`、`draftIsDerivedFromUntrustedInput`、`A5SQL_MCP_ROOTS` の扱いがずれていないことを見る。
 - 0.9.9 の API Freeze Rehearsal では、`.a5er` 起動時の `tools/list` を基準に tool 名、description、input schema、stable read-only / experimental draft の分類を固定する。`review_a5sql_schema`、`suggest_schema_changes`、`compare_a5er_with_live_schema` は stable read-only の分析・比較 tool、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` は experimental draft tool として扱う。
+- 0.9.10 の Preflight Contract Audit では、`.a5er` 起動時の `tools/list` を source of truth として、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md`、server registration、test の contract drift を検出する。stable read-only tool は `experimental draft tool` marker を持たず、生成補助 tool だけが description に `experimental draft tool` marker を持つ状態を 1.0.0 前の公開 contract として扱う。
 
 ## 現在の MCP 構成
 

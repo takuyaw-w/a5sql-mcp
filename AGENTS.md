@@ -59,6 +59,8 @@
 
 0.9.9 の API Freeze Rehearsal では、`.a5er` 起動時の `tools/list` を基準に tool 名、description、input schema、stable read-only / experimental draft の分類を固定する。`review_a5sql_schema`、`suggest_schema_changes`、`compare_a5er_with_live_schema` は stable read-only の分析・比較 tool として扱い、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` は experimental draft tool として扱う。
 
+0.9.10 の Preflight Contract Audit では、`.a5er` 起動時の `tools/list` を source of truth として、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md`、server registration、test の contract drift を検出する。stable read-only tool は `experimental draft tool` marker を持たず、生成補助 tool だけが description に `experimental draft tool` marker を持つ状態を 1.0.0 前の公開 contract として扱う。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。

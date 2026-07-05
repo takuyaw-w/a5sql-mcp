@@ -427,6 +427,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 
 0.9.9 API Freeze Rehearsal では、`.a5er` 起動時に公開される tool 名、description、input schema、stable read-only / experimental draft の分類を `tools/list` で固定しています。`review_a5sql_schema`、`suggest_schema_changes`、`compare_a5er_with_live_schema` は読み取り専用の分析・比較 tool として stable 側に置き、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` だけを experimental draft tool として扱います。
 
+0.9.10 Preflight Contract Audit では、同じ `tools/list` を source of truth として、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md`、server registration、test の contract drift を検出します。stable read-only tool は `experimental draft tool` marker を持たず、生成補助 tool だけが description に `experimental draft tool` marker を持つ状態を 1.0.0 前の公開 contract として確認します。
+
 0.9.6 では、実ファイル耐性を再確認するために `.a5er` の unknown / truncated / encoding mismatch fixture と SQL split / referenced table 抽出の quote / comment 処理を固定しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。
 
 `unrecognized` の場合は、空の正常スキーマとして扱わず、まず `read_a5sql_file` または `read_a5sql_asset` で先頭行、拡張子、文字コードを確認してください。A5:ER では `View`、`Index`、`Position`、`PageInfo`、`DomainInfo`、`CommonField` など、存在する optional 情報だけを構造化します。未知セクションは無視しますが、table や relationship として成立しない section は warning で返します。
