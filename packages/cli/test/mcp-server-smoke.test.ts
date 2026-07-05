@@ -33,7 +33,7 @@ describe("A5:SQL MCP server smoke", () => {
     ]);
   });
 
-  it("freezes the 0.9.9 MCP API surface", async () => {
+  it("audits the 0.9.10 MCP API surface before 1.0.0", async () => {
     const root = path.join(os.tmpdir(), `a5sql-mcp-api-freeze-${randomUUID()}`);
     const filePath = path.join(root, "schema.a5er");
     await mkdir(root, { recursive: true });
@@ -75,6 +75,12 @@ describe("A5:SQL MCP server smoke", () => {
       "generate_migration_plan",
     ];
     const expectedToolNames = [...stableReadOnlyTools, ...experimentalDraftTools];
+    expect(new Set(expectedToolNames).size).toBe(expectedToolNames.length);
+    for (const toolName of stableReadOnlyTools) {
+      expect(experimentalDraftTools, `${toolName} should not be a draft tool`).not.toContain(
+        toolName,
+      );
+    }
 
     const server = await createA5sqlMcpServer({ fileArg: filePath });
     const client = new Client({ name: "a5sql-mcp-test", version: "0.0.0" });
@@ -93,6 +99,10 @@ describe("A5:SQL MCP server smoke", () => {
         expect(tool?.description, `${toolName} should have a description`).toEqual(
           expect.any(String),
         );
+        expect(
+          tool?.description?.trim(),
+          `${toolName} should not have an empty description`,
+        ).not.toBe("");
         expect(tool?.inputSchema, `${toolName} should expose an input schema`).toEqual(
           expect.any(Object),
         );
