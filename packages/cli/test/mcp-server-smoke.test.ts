@@ -133,6 +133,14 @@ describe("A5:SQL MCP server smoke", () => {
 
       const tools = await client.listTools();
       const toolsByName = new Map(tools.tools.map((tool) => [tool.name, tool]));
+      const expectDescriptionContains = (toolName: string, expectedParts: string[]) => {
+        const description = toolsByName.get(toolName)?.description ?? "";
+        for (const expectedPart of expectedParts) {
+          expect(description, `${toolName} description should mention ${expectedPart}`).toContain(
+            expectedPart,
+          );
+        }
+      };
 
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([...expectedToolNames].sort());
       for (const toolName of expectedToolNames) {
@@ -157,6 +165,36 @@ describe("A5:SQL MCP server smoke", () => {
       for (const toolName of experimentalDraftTools) {
         expect(toolsByName.get(toolName)?.description ?? "").toContain("experimental draft tool");
       }
+      for (const toolName of expectedToolNames) {
+        expectDescriptionContains(toolName, ["MCP"]);
+      }
+      for (const toolName of [
+        "detect_a5sql_locations",
+        "read_a5sql_asset",
+        "list_a5sql_connections",
+        "search_a5sql_assets",
+        "parse_a5sql_asset",
+        "generate_sql_select",
+        "compare_a5er_with_live_schema",
+        "generate_migration_plan",
+      ]) {
+        expectDescriptionContains(toolName, ["DB には接続しません"]);
+      }
+      for (const toolName of [
+        "read_a5sql_asset",
+        "list_a5sql_connections",
+        "search_a5sql_assets",
+        "parse_a5sql_asset",
+      ]) {
+        expectDescriptionContains(toolName, ["roots", "A5SQL_MCP_ROOTS"]);
+      }
+      for (const toolName of experimentalDraftTools) {
+        expectDescriptionContains(toolName, ["experimental draft tool"]);
+      }
+      for (const toolName of ["generate_model_files", "generate_schema_markdown"]) {
+        expectDescriptionContains(toolName, ["ファイルシステムには書き込みません"]);
+      }
+      expectDescriptionContains("generate_migration_plan", ["実行もしません"]);
 
       const selectResult = await client.callTool({
         name: "generate_sql_select",
