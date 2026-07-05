@@ -271,9 +271,7 @@ describe("public documentation redaction audit", () => {
       expect(text, `${relativePath} should document no filesystem writes`).toContain(
         "ファイルシステムには書き込みません",
       );
-      expect(text, `${relativePath} should document credential non-goal`).toContain(
-        "資格情報",
-      );
+      expect(text, `${relativePath} should document credential non-goal`).toContain("資格情報");
     }
   });
 });
