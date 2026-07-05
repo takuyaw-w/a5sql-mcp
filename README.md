@@ -431,6 +431,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 
 0.9.13 Docs / Onboarding Freeze では、1.0.0 前の利用者向け onboarding とエージェント向け安全境界を固定します。Codex、Cursor、Claude Code の設定例、`--mcp` で指定する起動時ファイル、`roots` / `A5SQL_MCP_ROOTS` の必要最小限指定、`detect_a5sql_locations` が候補提示だけであること、安全な範囲読み取り、untrusted payload、review 用 draft、1.0.0 non-goal を同じ説明として維持します。
 
+0.10.0 Architecture Pattern Classification and Tool Description Audit では、この MCP server を Resource Gateway / Domain-Specific Adapter として扱います。A5:SQL / A5:ER のローカル資産を `roots` / `A5SQL_MCP_ROOTS`、`assetId`、範囲読み取り、limit、paging で段階的に読み、A5:SQL 由来の本文、コメント、識別子、SQL、draft は untrusted content として扱います。God Tool、unsanitized resource content、同期的な長時間処理、曖昧な tool description を anti-pattern として監査し、`tools/list` の tool description で使い分け、返す内容、read-only / draft 境界を判断しやすくします。DB には接続しません。SQL を実行しません。ファイルシステムには書き込みません。資格情報の復号・表示は行いません。
+
 0.9.6 では、実ファイル耐性を再確認するために `.a5er` の unknown / truncated / encoding mismatch fixture と SQL split / referenced table 抽出の quote / comment 処理を固定しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。
 
 `unrecognized` の場合は、空の正常スキーマとして扱わず、まず `read_a5sql_file` または `read_a5sql_asset` で先頭行、拡張子、文字コードを確認してください。A5:ER では `View`、`Index`、`Position`、`PageInfo`、`DomainInfo`、`CommonField` など、存在する optional 情報だけを構造化します。未知セクションは無視しますが、table や relationship として成立しない section は warning で返します。

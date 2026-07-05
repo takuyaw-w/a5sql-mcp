@@ -243,4 +243,37 @@ describe("public documentation redaction audit", () => {
       expect(text, `${relativePath} should document daemon non-goal`).toContain("daemon");
     }
   });
+
+  it("documents the 0.10.0 architecture pattern and tool description audit", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.10.0`).toContain("0.10.0");
+      expect(text, `${relativePath} should document architecture pattern`).toContain(
+        "Architecture Pattern",
+      );
+      expect(text, `${relativePath} should document Resource Gateway`).toContain(
+        "Resource Gateway",
+      );
+      expect(text, `${relativePath} should document Domain-Specific Adapter`).toContain(
+        "Domain-Specific Adapter",
+      );
+      expect(text, `${relativePath} should document anti-pattern`).toContain("anti-pattern");
+      expect(text, `${relativePath} should document tool description audit`).toContain(
+        "tool description",
+      );
+      expect(text, `${relativePath} should document DB non-goal`).toContain("DB には接続しません");
+      expect(text, `${relativePath} should document no filesystem writes`).toContain(
+        "ファイルシステムには書き込みません",
+      );
+      expect(text, `${relativePath} should document credential non-goal`).toContain(
+        "資格情報",
+      );
+    }
+  });
 });

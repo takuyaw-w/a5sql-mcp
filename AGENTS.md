@@ -63,6 +63,8 @@
 
 0.9.13 の Docs / Onboarding Freeze では、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md` が同じ onboarding と安全境界を説明していることを固定する。`--mcp` で指定する起動時ファイル、`roots` / `A5SQL_MCP_ROOTS` の必要最小限指定、`detect_a5sql_locations` が候補提示だけであること、`startLine` / `maxLines`、`offsetChars` / `maxChars` による範囲読み取り、`contentIsUntrusted`、`trustedMetadataFields`、`untrustedPayloadFields`、`draftIsDerivedFromUntrustedInput`、`draftOutputFields`、そのまま実行しない / そのまま適用しない説明、DB 接続、SQL 実行、書き込み、資格情報の復号・表示、Web UI、daemon を 1.0.0 に含めない説明を揃える。
 
+0.10.0 の Architecture Pattern Classification and Tool Description Audit では、この MCP server を Resource Gateway / Domain-Specific Adapter として扱う。A5:SQL / A5:ER のローカル資産を `roots` / `A5SQL_MCP_ROOTS`、`assetId`、範囲読み取り、limit、paging で段階的に読み、A5:SQL 由来の本文、コメント、識別子、SQL、draft は untrusted content として扱う。God Tool、unsanitized resource content、同期的な長時間処理、曖昧な tool description を anti-pattern として監査し、`tools/list` の tool description で使い分け、返す内容、read-only / draft 境界を判断しやすくする。DB には接続しません。SQL を実行しません。ファイルシステムには書き込みません。資格情報の復号・表示は行わない。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
