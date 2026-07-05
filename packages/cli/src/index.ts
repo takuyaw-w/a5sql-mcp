@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url";
 
 import { parseA5erIni, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
 
+import {
+  DEFAULT_TOOL_PROFILE,
+  TOOL_PROFILES,
+  parseToolProfile,
+  type ToolProfile,
+} from "./mcp/tool-profiles.js";
 import { readDecodedTextFile, type DecodedText } from "./text.js";
 
 const DEFAULT_CONFIGURED_FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -28,33 +34,74 @@ export type ParseFileOptions = {
   maxBytes?: number;
 };
 
-async function main(argv: string[]): Promise<void> {
-  const args = argv.slice(2);
-  const mcpMode = args[0] === "--mcp";
-  const fileArg = mcpMode ? args[1] : args[0];
+export type CliArguments =
+  | { mode: "help"; exitCode: 0 | 1 }
+  | { mode: "parse"; fileArg: string }
+  | { mode: "mcp"; fileArg: string; toolProfile: ToolProfile };
+
+export function parseCliArguments(args: string[]): CliArguments {
+  if (args.length === 0) {
+    return { mode: "help", exitCode: 1 };
+  }
+  if (args[0] === "--help" || args[0] === "-h") {
+    return { mode: "help", exitCode: 0 };
+  }
+  if (args[0] !== "--mcp") {
+    return { mode: "parse", fileArg: args[0] };
+  }
+
+  const fileArg = args[1];
   if (!fileArg || fileArg === "--help" || fileArg === "-h") {
+    return { mode: "help", exitCode: fileArg ? 0 : 1 };
+  }
+
+  let toolProfile = DEFAULT_TOOL_PROFILE;
+  for (let index = 2; index < args.length; index += 1) {
+    const option = args[index];
+    if (option === "--tool-profile") {
+      const value = args[index + 1];
+      if (!value) {
+        throw new Error(`--tool-profile requires one of: ${TOOL_PROFILES.join(", ")}.`);
+      }
+      toolProfile = parseToolProfile(value);
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown MCP option: ${option}`);
+  }
+
+  return { mode: "mcp", fileArg, toolProfile };
+}
+
+async function main(argv: string[]): Promise<void> {
+  const parsedArgs = parseCliArguments(argv.slice(2));
+  if (parsedArgs.mode === "help") {
     printHelp();
-    process.exitCode = fileArg ? 0 : 1;
+    process.exitCode = parsedArgs.exitCode;
     return;
   }
 
-  if (mcpMode) {
+  if (parsedArgs.mode === "mcp") {
     const { runMcpServer } = await import("./mcp.js");
-    await runMcpServer({ fileArg });
+    await runMcpServer({
+      fileArg: parsedArgs.fileArg,
+      toolProfile: parsedArgs.toolProfile,
+    });
     return;
   }
 
-  const result = await parseFile(fileArg);
+  const result = await parseFile(parsedArgs.fileArg);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 function printHelp(): void {
   process.stderr.write(`Usage:\n`);
   process.stderr.write(`  a5sql-mcp <file>\n`);
-  process.stderr.write(`  a5sql-mcp --mcp <file>\n\n`);
+  process.stderr.write(`  a5sql-mcp --mcp <file> [--tool-profile <profile>]\n\n`);
   process.stderr.write(
     `Parse a local .a5er or .sql file and print JSON, or serve it over MCP stdio.\n`,
   );
+  process.stderr.write(`MCP tool profiles: all, core-read, schema-explore, draft-generation.\n`);
 }
 
 function detectKind(filePath: string): CliResult["kind"] {

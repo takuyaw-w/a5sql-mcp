@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 
+import { parseCliArguments } from "../src/index.js";
 import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
 import {
   ALL_TOOL_NAMES,
@@ -60,6 +61,36 @@ function expectTrustedGuidanceExcludesPayload(
 }
 
 describe("A5:SQL MCP server smoke", () => {
+  it("parses optional MCP tool profile CLI arguments", () => {
+    expect(parseCliArguments(["--mcp", "schema.a5er"])).toEqual({
+      mode: "mcp",
+      fileArg: "schema.a5er",
+      toolProfile: "all",
+    });
+    expect(parseCliArguments(["--mcp", "schema.a5er", "--tool-profile", "schema-explore"])).toEqual(
+      {
+        mode: "mcp",
+        fileArg: "schema.a5er",
+        toolProfile: "schema-explore",
+      },
+    );
+    expect(parseCliArguments(["schema.a5er"])).toEqual({
+      mode: "parse",
+      fileArg: "schema.a5er",
+    });
+    expect(parseCliArguments(["--help"])).toEqual({ mode: "help", exitCode: 0 });
+    expect(parseCliArguments([])).toEqual({ mode: "help", exitCode: 1 });
+    expect(() => parseCliArguments(["--mcp", "schema.a5er", "--tool-profile", "wide-open"])).toThrow(
+      "Invalid tool profile: wide-open",
+    );
+    expect(() => parseCliArguments(["--mcp", "schema.a5er", "--tool-profile"])).toThrow(
+      "--tool-profile requires one of: all, core-read, schema-explore, draft-generation.",
+    );
+    expect(() => parseCliArguments(["--mcp", "schema.a5er", "--unknown"])).toThrow(
+      "Unknown MCP option: --unknown",
+    );
+  });
+
   it("defines scoped tool profiles without overlap mistakes", () => {
     expect(parseToolProfile(undefined)).toBe("all");
     expect(parseToolProfile("all")).toBe("all");
