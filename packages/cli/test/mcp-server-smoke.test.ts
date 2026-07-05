@@ -60,6 +60,38 @@ function expectTrustedGuidanceExcludesPayload(
   }
 }
 
+async function createToolsListForProfile(
+  filePath: string,
+  toolProfile?: "all" | "core-read" | "schema-explore" | "draft-generation",
+): Promise<string[]> {
+  const server = await createA5sqlMcpServer({ fileArg: filePath, toolProfile });
+  const client = new Client({ name: "a5sql-mcp-profile-test", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const tools = await client.listTools();
+    return tools.tools.map((tool) => tool.name).sort();
+  } finally {
+    await Promise.allSettled([client.close(), server.close()]);
+  }
+}
+
+async function createMinimalA5erFile(root: string): Promise<string> {
+  const filePath = path.join(root, "schema.a5er");
+  await writeFile(
+    filePath,
+    [
+      "# A5:ER FORMAT:19",
+      "[Entity]",
+      "PName=users",
+      'Field="ID","id","Integer","NOT NULL",0,"","",$FFFFFFFF,""',
+    ].join("\n"),
+    "utf8",
+  );
+  return filePath;
+}
+
 describe("A5:SQL MCP server smoke", () => {
   it("parses optional MCP tool profile CLI arguments", () => {
     expect(parseCliArguments(["--mcp", "schema.a5er"])).toEqual({
@@ -139,6 +171,52 @@ describe("A5:SQL MCP server smoke", () => {
     expect(shouldRegisterToolForProfile("generate_sql_select", "schema-explore")).toBe(false);
     expect(shouldRegisterToolForProfile("generate_sql_select", "draft-generation")).toBe(true);
     expect(shouldRegisterToolForProfile("generate_sql_select", "all")).toBe(true);
+  });
+
+  it("scopes tools/list by optional tool profile", async () => {
+    const root = path.join(os.tmpdir(), `a5sql-mcp-tool-profile-${randomUUID()}`);
+    await mkdir(root, { recursive: true });
+
+    try {
+      const filePath = await createMinimalA5erFile(root);
+
+      await expect(createToolsListForProfile(filePath)).resolves.toEqual(
+        [...ALL_TOOL_NAMES].sort(),
+      );
+      await expect(createToolsListForProfile(filePath, "all")).resolves.toEqual(
+        [...ALL_TOOL_NAMES].sort(),
+      );
+      await expect(createToolsListForProfile(filePath, "core-read")).resolves.toEqual(
+        [...CORE_READ_TOOL_NAMES].sort(),
+      );
+      await expect(createToolsListForProfile(filePath, "schema-explore")).resolves.toEqual(
+        [...SCHEMA_EXPLORE_TOOL_NAMES].sort(),
+      );
+      await expect(createToolsListForProfile(filePath, "draft-generation")).resolves.toEqual(
+        [...DRAFT_GENERATION_TOOL_NAMES].sort(),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps .a5er-only tools hidden for schema profile on text startup files", async () => {
+    const root = path.join(os.tmpdir(), `a5sql-mcp-text-profile-${randomUUID()}`);
+    await mkdir(root, { recursive: true });
+
+    try {
+      const filePath = path.join(root, "notes.txt");
+      await writeFile(filePath, "plain text", "utf8");
+
+      await expect(createToolsListForProfile(filePath, "schema-explore")).resolves.toEqual(
+        [...CORE_READ_TOOL_NAMES].sort(),
+      );
+      await expect(createToolsListForProfile(filePath, "draft-generation")).resolves.toEqual(
+        [...CORE_READ_TOOL_NAMES].sort(),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("reports 0.10.0 version metadata", async () => {

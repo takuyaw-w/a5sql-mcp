@@ -1,7 +1,8 @@
 import { stat } from "node:fs/promises";
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { AnySchema, ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 
 import { parseFile, type CliResult } from "../index.js";
 import {
@@ -52,16 +53,36 @@ import {
   searchA5sqlAssetsInputSchema,
   suggestSchemaChangesInputSchema,
 } from "./tool-schemas.js";
+import {
+  DEFAULT_TOOL_PROFILE,
+  shouldRegisterToolForProfile,
+  type A5sqlMcpToolName,
+  type ToolProfile,
+} from "./tool-profiles.js";
 import type { ParsedFileLoader } from "./types.js";
 
 export type McpServerOptions = {
   fileArg: string;
+  toolProfile?: ToolProfile;
 };
 
 export const A5SQL_MCP_SERVER_VERSION = "0.10.0";
 
-export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void> {
-  const server = await createA5sqlMcpServer({ fileArg });
+type ToolRegistrationConfig<
+  OutputArgs extends ZodRawShapeCompat | AnySchema,
+  InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
+> = {
+  title?: string;
+  description?: string;
+  inputSchema?: InputArgs;
+  outputSchema?: OutputArgs;
+};
+
+export async function runMcpServer({
+  fileArg,
+  toolProfile = DEFAULT_TOOL_PROFILE,
+}: McpServerOptions): Promise<void> {
+  const server = await createA5sqlMcpServer({ fileArg, toolProfile });
   const transport = new StdioServerTransport();
   transport.onerror = (error) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -79,7 +100,10 @@ export async function runMcpServer({ fileArg }: McpServerOptions): Promise<void>
   process.once("SIGTERM", shutdown);
 }
 
-export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promise<McpServer> {
+export async function createA5sqlMcpServer({
+  fileArg,
+  toolProfile = DEFAULT_TOOL_PROFILE,
+}: McpServerOptions): Promise<McpServer> {
   const initialFile = await parseFile(fileArg);
   const initialFileStat = await stat(initialFile.filePath);
   const getParsedFile = createParsedFileCache(initialFile, {
@@ -90,8 +114,20 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     name: "a5sql-mcp",
     version: A5SQL_MCP_SERVER_VERSION,
   });
+  const registerProfiledTool = <
+    OutputArgs extends ZodRawShapeCompat | AnySchema,
+    InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
+  >(
+    toolName: A5sqlMcpToolName,
+    toolConfig: ToolRegistrationConfig<OutputArgs, InputArgs>,
+    handler: ToolCallback<InputArgs>,
+  ) => {
+    if (shouldRegisterToolForProfile(toolName, toolProfile)) {
+      server.registerTool(toolName, toolConfig, handler);
+    }
+  };
 
-  server.registerTool(
+  registerProfiledTool(
     "describe_a5sql_file",
     {
       title: "Describe configured A5:SQL file",
@@ -102,7 +138,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createDescribeA5sqlFileHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "parse_a5sql_file",
     {
       title: "Parse configured A5:SQL file",
@@ -113,7 +149,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createParseA5sqlFileHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "read_a5sql_file",
     {
       title: "Read configured A5:SQL file",
@@ -124,7 +160,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createReadA5sqlFileHandler(initialFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "detect_a5sql_locations",
     {
       title: "Detect A5:SQL locations",
@@ -135,7 +171,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createDetectA5sqlLocationsHandler(),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "read_a5sql_asset",
     {
       title: "Read A5:SQL asset by asset ID",
@@ -146,7 +182,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createReadA5sqlAssetHandler(),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "list_a5sql_connections",
     {
       title: "List masked A5:SQL connection candidates",
@@ -157,7 +193,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createListA5sqlConnectionsHandler(),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "search_a5sql_assets",
     {
       title: "Search A5:SQL assets",
@@ -168,7 +204,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
     createSearchA5sqlAssetsHandler(),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "parse_a5sql_asset",
     {
       title: "Parse A5:SQL asset by asset ID",
@@ -180,7 +216,7 @@ export async function createA5sqlMcpServer({ fileArg }: McpServerOptions): Promi
   );
 
   if (initialFile.kind === "a5er") {
-    registerA5erTools(server, getParsedFile);
+    registerA5erTools(server, getParsedFile, toolProfile);
   }
 
   return server;
@@ -206,8 +242,25 @@ function createParsedFileCache(
   };
 }
 
-function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): void {
-  server.registerTool(
+function registerA5erTools(
+  server: McpServer,
+  getParsedFile: ParsedFileLoader,
+  toolProfile: ToolProfile,
+): void {
+  const registerProfiledTool = <
+    OutputArgs extends ZodRawShapeCompat | AnySchema,
+    InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
+  >(
+    toolName: A5sqlMcpToolName,
+    toolConfig: ToolRegistrationConfig<OutputArgs, InputArgs>,
+    handler: ToolCallback<InputArgs>,
+  ) => {
+    if (shouldRegisterToolForProfile(toolName, toolProfile)) {
+      server.registerTool(toolName, toolConfig, handler);
+    }
+  };
+
+  registerProfiledTool(
     "list_a5sql_tables",
     {
       title: "List tables in configured A5:ER file",
@@ -218,7 +271,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createListA5sqlTablesHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "describe_a5sql_table",
     {
       title: "Describe table in configured A5:ER file",
@@ -229,7 +282,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createDescribeA5sqlTableHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "explain_a5sql_table",
     {
       title: "Explain table in configured A5:ER file",
@@ -240,7 +293,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createExplainA5sqlTableHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "list_a5sql_relationships",
     {
       title: "List relationships in configured A5:ER file",
@@ -251,7 +304,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createListA5sqlRelationshipsHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "find_a5sql_tables",
     {
       title: "Find tables in configured A5:ER file",
@@ -262,7 +315,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createFindA5sqlTablesHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "find_a5sql_columns",
     {
       title: "Find columns in configured A5:ER file",
@@ -273,7 +326,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createFindA5sqlColumnsHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "generate_sql_select",
     {
       title: "Generate SELECT SQL from configured A5:ER file",
@@ -284,7 +337,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createGenerateSqlSelectHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "generate_mermaid_er_diagram",
     {
       title: "Generate Mermaid ER diagram from configured A5:ER file",
@@ -295,7 +348,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createGenerateMermaidErDiagramHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "generate_model_files",
     {
       title: "Generate model files from configured A5:ER file",
@@ -306,7 +359,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createGenerateModelFilesHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "generate_schema_markdown",
     {
       title: "Generate Markdown schema document from configured A5:ER file",
@@ -317,7 +370,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createGenerateSchemaMarkdownHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "review_a5sql_schema",
     {
       title: "Review schema quality in configured A5:ER file",
@@ -328,7 +381,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createReviewA5sqlSchemaHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "suggest_schema_changes",
     {
       title: "Suggest schema changes from configured A5:ER file",
@@ -339,7 +392,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createSuggestSchemaChangesHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "compare_a5er_with_live_schema",
     {
       title: "Compare configured A5:ER file with a live schema snapshot",
@@ -350,7 +403,7 @@ function registerA5erTools(server: McpServer, getParsedFile: ParsedFileLoader): 
     createCompareA5erWithLiveSchemaHandler(getParsedFile),
   );
 
-  server.registerTool(
+  registerProfiledTool(
     "generate_migration_plan",
     {
       title: "Generate migration plan from configured A5:ER file and live schema",
