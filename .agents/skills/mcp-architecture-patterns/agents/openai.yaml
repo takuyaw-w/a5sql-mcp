@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP Architecture Patterns"
+  short_description: "Review MCP server architecture patterns"
+  default_prompt: "Use $mcp-architecture-patterns to review an MCP server design for pattern fit, tool boundaries, and anti-patterns."
