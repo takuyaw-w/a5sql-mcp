@@ -241,7 +241,7 @@ a5sql の review_a5sql_schema を使って、NULL 許容、主キー、外部キ
 - A5:SQL 設定ファイルや ER 図ファイルへの書き込み。
 - 資格情報の復号、表示、保存。
 - ORM や migration framework への完全対応。
-- Web UI や常駐 daemon。
+- Web UI や daemon。
 
 これらを将来追加する場合は、読み取り専用クエリ、明示的な許可、監査ログ、タイムアウト、件数制限などを別設計で扱います。
 
@@ -428,6 +428,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 0.9.9 API Freeze Rehearsal では、`.a5er` 起動時に公開される tool 名、description、input schema、stable read-only / experimental draft の分類を `tools/list` で固定しています。`review_a5sql_schema`、`suggest_schema_changes`、`compare_a5er_with_live_schema` は読み取り専用の分析・比較 tool として stable 側に置き、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` だけを experimental draft tool として扱います。
 
 0.9.10 Preflight Contract Audit では、同じ `tools/list` を source of truth として、README、AGENTS.md、`.agents/skills/a5sql-mcp/SKILL.md`、server registration、test の contract drift を検出します。stable read-only tool は `experimental draft tool` marker を持たず、生成補助 tool だけが description に `experimental draft tool` marker を持つ状態を 1.0.0 前の公開 contract として確認します。
+
+0.9.13 Docs / Onboarding Freeze では、1.0.0 前の利用者向け onboarding とエージェント向け安全境界を固定します。Codex、Cursor、Claude Code の設定例、`--mcp` で指定する起動時ファイル、`roots` / `A5SQL_MCP_ROOTS` の必要最小限指定、`detect_a5sql_locations` が候補提示だけであること、安全な範囲読み取り、untrusted payload、review 用 draft、1.0.0 non-goal を同じ説明として維持します。
 
 0.9.6 では、実ファイル耐性を再確認するために `.a5er` の unknown / truncated / encoding mismatch fixture と SQL split / referenced table 抽出の quote / comment 処理を固定しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。
 

@@ -178,4 +178,69 @@ describe("public documentation redaction audit", () => {
       );
     }
   });
+
+  it("documents the 0.9.13 docs and onboarding freeze boundaries", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+    const readme = docs.find((doc) => doc.relativePath === "../../../README.md")?.text ?? "";
+
+    expect(readme).toContain("0.9.13");
+    expect(readme).toContain("Docs / Onboarding Freeze");
+    expect(readme).toContain("Codex");
+    expect(readme).toContain("Cursor");
+    expect(readme).toContain("Claude Code");
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.9.13`).toContain("0.9.13");
+      expect(text, `${relativePath} should document docs freeze`).toContain(
+        "Docs / Onboarding Freeze",
+      );
+      expect(text, `${relativePath} should document --mcp file startup`).toContain("--mcp");
+      expect(text, `${relativePath} should document root env`).toContain("A5SQL_MCP_ROOTS");
+      expect(text, `${relativePath} should document roots`).toContain("roots");
+      expect(text, `${relativePath} should document detect as hint only`).toContain(
+        "detect_a5sql_locations",
+      );
+      expect(text, `${relativePath} should document minimum privilege roots`).toContain(
+        "必要最小限",
+      );
+      expect(text, `${relativePath} should document line range read`).toContain("startLine");
+      expect(text, `${relativePath} should document maxLines`).toContain("maxLines");
+      expect(text, `${relativePath} should document offset range read`).toContain("offsetChars");
+      expect(text, `${relativePath} should document maxChars`).toContain("maxChars");
+      expect(text, `${relativePath} should document untrusted signal`).toContain(
+        "contentIsUntrusted",
+      );
+      expect(text, `${relativePath} should document trusted metadata`).toContain(
+        "trustedMetadataFields",
+      );
+      expect(text, `${relativePath} should document untrusted payload`).toContain(
+        "untrustedPayloadFields",
+      );
+      expect(text, `${relativePath} should document draft input source`).toContain(
+        "draftIsDerivedFromUntrustedInput",
+      );
+      expect(text, `${relativePath} should document draft output fields`).toContain(
+        "draftOutputFields",
+      );
+      expect(text, `${relativePath} should warn against direct execution`).toContain(
+        "そのまま実行",
+      );
+      expect(text, `${relativePath} should warn against direct application`).toContain(
+        "そのまま適用",
+      );
+      expect(text, `${relativePath} should document database connection non-goal`).toContain(
+        "DB 接続",
+      );
+      expect(text, `${relativePath} should document SQL execution non-goal`).toContain("SQL 実行");
+      expect(text, `${relativePath} should document write non-goal`).toContain("書き込み");
+      expect(text, `${relativePath} should document credential non-goal`).toContain("資格情報");
+      expect(text, `${relativePath} should document Web UI non-goal`).toContain("Web UI");
+      expect(text, `${relativePath} should document daemon non-goal`).toContain("daemon");
+    }
+  });
 });
