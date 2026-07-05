@@ -52,8 +52,8 @@ function expectTrustedGuidanceExcludesPayload(
 }
 
 describe("A5:SQL MCP server smoke", () => {
-  it("reports 0.9.11 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.11");
+  it("reports 0.9.12 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.9.12");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -68,10 +68,10 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.9.11",
-      "0.9.11",
-      "0.9.11",
-      "0.9.11",
+      "0.9.12",
+      "0.9.12",
+      "0.9.12",
+      "0.9.12",
     ]);
   });
 
