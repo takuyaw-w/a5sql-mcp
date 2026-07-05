@@ -8,6 +8,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 
 import { A5SQL_MCP_SERVER_VERSION, createA5sqlMcpServer } from "../src/mcp/server.js";
+import {
+  ALL_TOOL_NAMES,
+  CORE_READ_TOOL_NAMES,
+  DRAFT_GENERATION_TOOL_NAMES,
+  SCHEMA_EXPLORE_TOOL_NAMES,
+  parseToolProfile,
+  shouldRegisterToolForProfile,
+} from "../src/mcp/tool-profiles.js";
 
 function expectUntrustedOutput(
   output: Record<string, unknown>,
@@ -52,6 +60,56 @@ function expectTrustedGuidanceExcludesPayload(
 }
 
 describe("A5:SQL MCP server smoke", () => {
+  it("defines scoped tool profiles without overlap mistakes", () => {
+    expect(parseToolProfile(undefined)).toBe("all");
+    expect(parseToolProfile("all")).toBe("all");
+    expect(parseToolProfile("core-read")).toBe("core-read");
+    expect(parseToolProfile("schema-explore")).toBe("schema-explore");
+    expect(parseToolProfile("draft-generation")).toBe("draft-generation");
+    expect(() => parseToolProfile("wide-open")).toThrow(
+      "Invalid tool profile: wide-open. Expected one of: all, core-read, schema-explore, draft-generation.",
+    );
+
+    expect(new Set(ALL_TOOL_NAMES).size).toBe(ALL_TOOL_NAMES.length);
+    expect(CORE_READ_TOOL_NAMES).toEqual([
+      "describe_a5sql_file",
+      "parse_a5sql_file",
+      "read_a5sql_file",
+      "detect_a5sql_locations",
+      "read_a5sql_asset",
+      "list_a5sql_connections",
+      "search_a5sql_assets",
+      "parse_a5sql_asset",
+    ]);
+    expect(SCHEMA_EXPLORE_TOOL_NAMES).toEqual([
+      ...CORE_READ_TOOL_NAMES,
+      "list_a5sql_tables",
+      "describe_a5sql_table",
+      "explain_a5sql_table",
+      "list_a5sql_relationships",
+      "find_a5sql_tables",
+      "find_a5sql_columns",
+    ]);
+    expect(DRAFT_GENERATION_TOOL_NAMES).toEqual([
+      ...CORE_READ_TOOL_NAMES,
+      "generate_sql_select",
+      "generate_mermaid_er_diagram",
+      "generate_model_files",
+      "generate_schema_markdown",
+      "review_a5sql_schema",
+      "suggest_schema_changes",
+      "compare_a5er_with_live_schema",
+      "generate_migration_plan",
+    ]);
+
+    expect(shouldRegisterToolForProfile("describe_a5sql_file", "core-read")).toBe(true);
+    expect(shouldRegisterToolForProfile("list_a5sql_tables", "core-read")).toBe(false);
+    expect(shouldRegisterToolForProfile("list_a5sql_tables", "schema-explore")).toBe(true);
+    expect(shouldRegisterToolForProfile("generate_sql_select", "schema-explore")).toBe(false);
+    expect(shouldRegisterToolForProfile("generate_sql_select", "draft-generation")).toBe(true);
+    expect(shouldRegisterToolForProfile("generate_sql_select", "all")).toBe(true);
+  });
+
   it("reports 0.10.0 version metadata", async () => {
     expect(A5SQL_MCP_SERVER_VERSION).toBe("0.10.0");
 
