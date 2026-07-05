@@ -29,6 +29,27 @@ npx @takuyaw-w/a5sql-mcp --mcp /absolute/path/to/model.a5er
 
 MCP クライアントから起動する場合は、相対パスの基準ディレクトリがクライアント依存になるため、基本的には絶対パスを指定します。
 
+### Optional tool profile
+
+通常は `--tool-profile` を指定しないで起動します。この場合は `all` と同じで、1.0.0 互換の tool 一覧を公開します。
+
+LLM client が tool 選択で迷う場合は、用途に近い profile で `tools/list` を絞れます。
+
+| Profile            | 用途                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `all`              | 既定。現在の full tool surface を維持します。                                                                                  |
+| `core-read`        | 起動時ファイルと明示 root 配下 asset の describe / search / read / parse に絞ります。                                          |
+| `schema-explore`   | `core-read` に加えて、`.a5er` の tables / columns / relationships / describe / explain / find を出します。                     |
+| `draft-generation` | `core-read` に加えて、schema review、比較、SQL / Mermaid / model / Markdown / migration の review 用 draft helper を出します。 |
+
+例:
+
+```bash
+npx @takuyaw-w/a5sql-mcp --mcp /absolute/path/to/model.a5er --tool-profile schema-explore
+```
+
+profile は tool 表示を絞るだけです。`roots` / `A5SQL_MCP_ROOTS` の境界、秘密情報マスク、untrusted content、draft disclosure、DB に接続しないこと、SQL を実行しないこと、ファイルシステムに書き込まないことは変わりません。
+
 ### Codex
 
 Codex は `~/.codex/config.toml`、または trusted project 内の `.codex/config.toml` に MCP server を設定します。CLI から登録する場合:
@@ -432,6 +453,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 0.9.13 Docs / Onboarding Freeze では、1.0.0 前の利用者向け onboarding とエージェント向け安全境界を固定します。Codex、Cursor、Claude Code の設定例、`--mcp` で指定する起動時ファイル、`roots` / `A5SQL_MCP_ROOTS` の必要最小限指定、`detect_a5sql_locations` が候補提示だけであること、安全な範囲読み取り、untrusted payload、review 用 draft、1.0.0 non-goal を同じ説明として維持します。
 
 0.10.0 Architecture Pattern Classification and Tool Description Audit では、この MCP server を Resource Gateway / Domain-Specific Adapter として扱います。A5:SQL / A5:ER のローカル資産を `roots` / `A5SQL_MCP_ROOTS`、`assetId`、範囲読み取り、limit、paging で段階的に読み、A5:SQL 由来の本文、コメント、識別子、SQL、draft は untrusted content として扱います。God Tool、unsanitized resource content、同期的な長時間処理、曖昧な tool description を anti-pattern として監査し、`tools/list` の tool description で使い分け、返す内容、read-only / draft 境界を判断しやすくします。DB には接続しません。SQL を実行しません。ファイルシステムには書き込みません。資格情報の復号・表示は行いません。
+
+0.10.1 Scoped Tool Surface / Client Profile では、既定の `--mcp <file>` 起動を `all` として維持しつつ、`--tool-profile core-read`、`--tool-profile schema-explore`、`--tool-profile draft-generation` で `tools/list` の表示を用途別に絞れるようにします。profile は tool 表示の調整であり、権限拡張や安全境界の代替ではありません。
 
 0.9.6 では、実ファイル耐性を再確認するために `.a5er` の unknown / truncated / encoding mismatch fixture と SQL split / referenced table 抽出の quote / comment 処理を固定しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。
 

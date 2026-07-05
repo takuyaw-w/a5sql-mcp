@@ -179,6 +179,30 @@ describe("public documentation redaction audit", () => {
     }
   });
 
+  it("documents the 0.10.1 optional tool profile surface", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.10.1`).toContain("0.10.1");
+      expect(text, `${relativePath} should document --tool-profile`).toContain("--tool-profile");
+      expect(text, `${relativePath} should document all profile`).toContain("all");
+      expect(text, `${relativePath} should document core-read profile`).toContain("core-read");
+      expect(text, `${relativePath} should document schema-explore profile`).toContain(
+        "schema-explore",
+      );
+      expect(text, `${relativePath} should document draft-generation profile`).toContain(
+        "draft-generation",
+      );
+      expect(text, `${relativePath} should document profile boundaries`).toContain("tool 表示");
+      expect(text, `${relativePath} should keep DB non-goal`).toContain("DB");
+    }
+  });
+
   it("documents the 0.9.13 docs and onboarding freeze boundaries", async () => {
     const docs = await Promise.all(
       PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({

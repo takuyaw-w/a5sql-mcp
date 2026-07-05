@@ -65,6 +65,8 @@
 
 0.10.0 の Architecture Pattern Classification and Tool Description Audit では、この MCP server を Resource Gateway / Domain-Specific Adapter として扱う。A5:SQL / A5:ER のローカル資産を `roots` / `A5SQL_MCP_ROOTS`、`assetId`、範囲読み取り、limit、paging で段階的に読み、A5:SQL 由来の本文、コメント、識別子、SQL、draft は untrusted content として扱う。God Tool、unsanitized resource content、同期的な長時間処理、曖昧な tool description を anti-pattern として監査し、`tools/list` の tool description で使い分け、返す内容、read-only / draft 境界を判断しやすくする。DB には接続しません。SQL を実行しません。ファイルシステムには書き込みません。資格情報の復号・表示は行わない。
 
+0.10.1 の Scoped Tool Surface / Client Profile では、`--tool-profile` で `all`、`core-read`、`schema-explore`、`draft-generation` を選べるようにする。未指定時は `all` と同じ 1.0.0 互換の tool 表示を維持する。profile は tool 表示を絞るだけであり、`roots` / `A5SQL_MCP_ROOTS`、秘密情報マスク、untrusted content、draft disclosure、DB 非接続、SQL 非実行、ファイル非書き込みの contract は変えない。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
