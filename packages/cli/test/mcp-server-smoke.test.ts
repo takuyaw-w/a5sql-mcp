@@ -112,9 +112,9 @@ describe("A5:SQL MCP server smoke", () => {
     });
     expect(parseCliArguments(["--help"])).toEqual({ mode: "help", exitCode: 0 });
     expect(parseCliArguments([])).toEqual({ mode: "help", exitCode: 1 });
-    expect(() => parseCliArguments(["--mcp", "schema.a5er", "--tool-profile", "wide-open"])).toThrow(
-      "Invalid tool profile: wide-open",
-    );
+    expect(() =>
+      parseCliArguments(["--mcp", "schema.a5er", "--tool-profile", "wide-open"]),
+    ).toThrow("Invalid tool profile: wide-open");
     expect(() => parseCliArguments(["--mcp", "schema.a5er", "--tool-profile"])).toThrow(
       "--tool-profile requires one of: all, core-read, schema-explore, draft-generation.",
     );

@@ -60,9 +60,7 @@ export function parseToolProfile(value: string | undefined): ToolProfile {
   if (isToolProfile(value)) {
     return value;
   }
-  throw new Error(
-    `Invalid tool profile: ${value}. Expected one of: ${TOOL_PROFILES.join(", ")}.`,
-  );
+  throw new Error(`Invalid tool profile: ${value}. Expected one of: ${TOOL_PROFILES.join(", ")}.`);
 }
 
 export function isToolProfile(value: string): value is ToolProfile {
