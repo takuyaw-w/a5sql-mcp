@@ -8,6 +8,28 @@ const PUBLIC_GUIDANCE_FILES = [
   "../../../.agents/skills/a5sql-mcp/SKILL.md",
 ] as const;
 
+function extractToolProfileGuidance(text: string) {
+  const startCandidates = [
+    text.indexOf("Optional tool profile"),
+    text.indexOf("0.10.1 の Scoped Tool Surface / Client Profile"),
+    text.indexOf("--tool-profile"),
+  ].filter((index) => index >= 0);
+  const start = startCandidates.length > 0 ? Math.min(...startCandidates) : -1;
+
+  if (start < 0) {
+    return "";
+  }
+
+  return text.slice(start, start + 1400);
+}
+
+function expectContainsAny(label: string, actual: string, expectedValues: string[]) {
+  expect(
+    expectedValues.some((expectedValue) => actual.includes(expectedValue)),
+    `${label} should include one of: ${expectedValues.join(", ")}`,
+  ).toBe(true);
+}
+
 describe("public documentation redaction audit", () => {
   it("does not include real local paths or credential-looking example values", async () => {
     const docs = await Promise.all(
@@ -188,18 +210,57 @@ describe("public documentation redaction audit", () => {
     );
 
     for (const { relativePath, text } of docs) {
+      const profileGuidance = extractToolProfileGuidance(text);
+
       expect(text, `${relativePath} should document 0.10.1`).toContain("0.10.1");
-      expect(text, `${relativePath} should document --tool-profile`).toContain("--tool-profile");
-      expect(text, `${relativePath} should document all profile`).toContain("all");
-      expect(text, `${relativePath} should document core-read profile`).toContain("core-read");
-      expect(text, `${relativePath} should document schema-explore profile`).toContain(
+      expect(profileGuidance, `${relativePath} should document --tool-profile`).toContain(
+        "--tool-profile",
+      );
+      expect(profileGuidance, `${relativePath} should document all profile`).toContain("all");
+      expect(profileGuidance, `${relativePath} should document core-read profile`).toContain(
+        "core-read",
+      );
+      expect(profileGuidance, `${relativePath} should document schema-explore profile`).toContain(
         "schema-explore",
       );
-      expect(text, `${relativePath} should document draft-generation profile`).toContain(
+      expect(profileGuidance, `${relativePath} should document draft-generation profile`).toContain(
         "draft-generation",
       );
-      expect(text, `${relativePath} should document profile boundaries`).toContain("tool 表示");
-      expect(text, `${relativePath} should keep DB non-goal`).toContain("DB");
+      expect(profileGuidance, `${relativePath} should document profile tool visibility`).toContain(
+        "tool 表示",
+      );
+      expectContainsAny(
+        `${relativePath} profile guidance should document permission boundary`,
+        profileGuidance,
+        ["権限", "安全境界"],
+      );
+      expectContainsAny(
+        `${relativePath} profile guidance should document root boundary`,
+        profileGuidance,
+        ["A5SQL_MCP_ROOTS", "root boundary"],
+      );
+      expectContainsAny(
+        `${relativePath} profile guidance should document secret masking`,
+        profileGuidance,
+        ["秘密情報マスク", "secret masking"],
+      );
+      expect(
+        profileGuidance,
+        `${relativePath} profile guidance should document untrusted content`,
+      ).toContain("untrusted content");
+      expect(
+        profileGuidance,
+        `${relativePath} profile guidance should document draft disclosure`,
+      ).toContain("draft disclosure");
+      expect(
+        profileGuidance,
+        `${relativePath} profile guidance should keep SQL non-goal`,
+      ).toContain("SQL");
+      expectContainsAny(
+        `${relativePath} profile guidance should document file write boundary`,
+        profileGuidance,
+        ["ファイルシステム", "ファイル非書き込み"],
+      );
     }
   });
 
