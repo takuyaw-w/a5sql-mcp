@@ -395,6 +395,11 @@ describe("public documentation redaction audit", () => {
       expect(guidance).toContain("1.0.0 前");
       expect(guidance).toContain("experimental draft tool");
       expect(guidance).toContain('outputKind: "draft"');
+      expect(guidance).toContain("review");
+      expect(guidance).toContain("DB 非接続");
+      expect(guidance).toContain("SQL 非実行");
+      expect(guidance).toContain("ファイルシステム非書き込み");
+      expect(guidance).toContain("未信頼 input");
       expect(guidance).toContain("0.11.0");
       expect(guidance).toContain("0.12.0");
       expect(guidance).toContain("0.13.0");
