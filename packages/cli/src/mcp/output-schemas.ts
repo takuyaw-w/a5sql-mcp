@@ -5,7 +5,7 @@ import type { A5sqlMcpToolName } from "./tool-profiles.js";
 function stableOutputWith(requiredField: string) {
   return z
     .object({
-      schemaVersion: z.literal("0.10.3"),
+      schemaVersion: z.literal("0.10.4"),
       resultType: z.enum(["success", "error", "not_found", "unrecognized"]),
       [requiredField]: z.json(),
       code: z.string().optional(),

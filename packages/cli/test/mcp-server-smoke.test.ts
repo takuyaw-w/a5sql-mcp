@@ -231,8 +231,8 @@ describe("A5:SQL MCP server smoke", () => {
     }
   });
 
-  it("reports 0.10.3 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.10.3");
+  it("reports 0.10.4 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.10.4");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -247,10 +247,10 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.10.3",
-      "0.10.3",
-      "0.10.3",
-      "0.10.3",
+      "0.10.4",
+      "0.10.4",
+      "0.10.4",
+      "0.10.4",
     ]);
   });
 

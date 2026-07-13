@@ -58,6 +58,19 @@ npx @takuyaw-w/a5sql-mcp --mcp /absolute/path/to/model.a5er --tool-profile schem
 
 profile は tool 表示を絞るだけで、権限機構ではなく安全境界の代替でもありません。`roots` / `A5SQL_MCP_ROOTS` の境界、秘密情報マスク、untrusted content、draft disclosure、DB に接続しないこと、SQL を実行しないこと、ファイルシステムに書き込まないことは変わりません。
 
+### MCP Resources
+
+0.10.4 の MCP Resource Gateway Pilot では、起動時ファイルを安全な summary として読む固定 Resource を追加しています。
+
+| Resource URI                             | 内容                                                                                         |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `a5sql://configured-file/summary`        | 起動時ファイルの種別、encoding、size、更新日時。本文、basename、absolute path は返しません。 |
+| `a5sql://configured-file/schema-summary` | `.a5er` 起動時だけ公開する、最大20件の table / relationship summary。                        |
+
+`resources/list` と `resources/read` で参照できます。schema summary の A5:SQL 由来 table、relationship、warning detail は `contentIsUntrusted: true` と `untrustedPayloadFields` を見て未信頼 payload として扱ってください。Resource URI、metadata、content、error にはユーザー固有 path を含めず、秘密情報は tool output と同じ境界でマスクします。
+
+`search_a5sql_assets`、`read_a5sql_asset`、`parse_a5sql_asset` は `roots` / `A5SQL_MCP_ROOTS` の明示が必要なため tool-only です。root/path を Resource URI に埋め込む template は公開しません。`--tool-profile` は `tools/list` だけを絞り、Resource filtering や権限機構には使いません。Resource を追加しても DB 接続、SQL 実行、ファイルシステムへの書き込みは行いません。
+
 ### Codex
 
 Codex は `~/.codex/config.toml`、または trusted project 内の `.codex/config.toml` に MCP server を設定します。CLI から登録する場合:
@@ -467,6 +480,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 0.10.2 Contract Integrity, Structured Errors and Safe Observability では、`warnings`、`message`、`code`、`nextAction` を固定 guidance に限定し、A5:SQL / live schema / tool input 由来の可変値を未信頼の `warningDetails` に分離します。assetId の探索は `maxFiles`、`visitedFileCount`、`lookupTruncated`、`cutoffReason` を返し、探索打ち切りと確定した未発見を区別します。truncated `.a5er` は完全 schema として解析せず、SQL の部分解析は statement 総数・返却数・truncation・末尾不完全性を明示します。
 
 0.10.3 Platform, Draft, Public Contract and CI Hardening では、CLI / core の text decoder を統合し、Windows だけを case-insensitive path dedupe とします。Laravel / SQLAlchemy model draft は言語別の安全な identifier / string literal と `syntaxValidation` metadata を使います。stable read-only 17 tool は `schemaVersion` / `resultType` を必須とする MCP `outputSchema` を公開し、`list_a5sql_connections` は `knownConnectionCount`、nullable な `totalConnectionCount`、`totalConnectionCountIsExact`、visited / cutoff metadata で正確な total と未知の total を区別します。CLI 直実行の JSON は既定でマスクされ、`--unsafe-raw-output` だけが固定 stderr warning つきで raw parse 結果を返します。PR / main CI は Ubuntu / Windows で Node.js、PHP、Python を使った test と draft syntax check を実行し、tag publish は npm publish 前に `published:check` を通します。
+
+0.10.4 MCP Resource Gateway Pilot では、`a5sql://configured-file/summary` と `.a5er` 専用の `a5sql://configured-file/schema-summary` を固定 URI の read-only Resource として公開します。Resource は path-free、summary-only、秘密情報マスク済みであり、A5:SQL 由来 payload は `contentIsUntrusted` / `untrustedPayloadFields` で未信頼として分類します。明示 `roots` が必要な asset 操作は tool-only のまま維持します。
 
 安全な tool call metadata が必要な場合だけ `A5SQL_MCP_OBSERVABILITY=stderr` を指定できます。stderr へ出すのは tool 名、process-local HMAC による input hash、latency、output size、固定 error code だけです。入力値、本文、秘密情報、絶対 path、例外 message は出しません。stdout は常に JSON-RPC 専用です。
 

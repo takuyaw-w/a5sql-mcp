@@ -124,6 +124,7 @@ async function main() {
     const actualToolNames = toolsResult.tools.map((tool) => tool.name).sort();
     assertToolSet("default published-style MCP tools/list", actualToolNames, EXPECTED_TOOL_NAMES);
     assertPublishedOutputSchemas(toolsResult.tools);
+    await assertPublishedResources(client, sampleA5er);
 
     await assertInstalledBinToolProfile(binPath, tempRoot, sampleA5er, {
       label: "--tool-profile all published-style MCP tools/list",
@@ -191,7 +192,7 @@ async function main() {
     });
 
     console.log(
-      `published:check passed with ${actualToolNames.length} tools and installed-package MCP client matrix from installed package bin`,
+      `published:check passed with ${actualToolNames.length} tools, 2 resources, and installed-package MCP client matrix from installed package bin`,
     );
   } finally {
     try {
@@ -313,6 +314,56 @@ async function listInstalledBinToolNames(binPath, cwd, sampleA5er, extraArgs = [
   } finally {
     await client.close();
   }
+}
+
+async function assertPublishedResources(client, sampleA5er) {
+  const expectedUris = [
+    "a5sql://configured-file/schema-summary",
+    "a5sql://configured-file/summary",
+  ];
+  const resourcesResult = await client.listResources();
+  const actualUris = resourcesResult.resources.map((resource) => resource.uri).sort();
+  assertToolSet("published-style MCP resources/list", actualUris, expectedUris);
+  assertSerializedExcludes("published resources/list path privacy", resourcesResult, sampleA5er);
+
+  const fileSummary = await readJsonResource(client, "a5sql://configured-file/summary");
+  assertObjectIncludes("configured file resource", fileSummary, {
+    schemaVersion: "0.10.4",
+    resultType: "configured_file_summary_resource",
+    kind: "a5er",
+    readOnly: true,
+    writesToFileSystem: false,
+    connectsToDatabase: false,
+    executesSql: false,
+    contentIsUntrusted: false,
+  });
+
+  const schemaSummary = await readJsonResource(client, "a5sql://configured-file/schema-summary");
+  assertObjectIncludes("configured schema resource", schemaSummary, {
+    schemaVersion: "0.10.4",
+    resultType: "configured_schema_summary_resource",
+    kind: "a5er",
+    contentIsUntrusted: true,
+  });
+  assertArrayIncludes(
+    "configured schema resource untrusted fields",
+    schemaSummary.untrustedPayloadFields,
+    ["tables", "relationships", "warningDetails"],
+  );
+  assertSerializedExcludes("configured file resource path privacy", fileSummary, sampleA5er);
+  assertSerializedExcludes("configured schema resource path privacy", schemaSummary, sampleA5er);
+}
+
+async function readJsonResource(client, uri) {
+  const result = await client.readResource({ uri });
+  const content = result.contents[0];
+  if (!content || typeof content.text !== "string") {
+    throw new Error(`${uri} must return text resource content.`);
+  }
+  if (content.uri !== uri || content.mimeType !== "application/json") {
+    throw new Error(`${uri} must preserve its URI and application/json MIME type.`);
+  }
+  return JSON.parse(content.text);
 }
 
 async function assertPublishedPackageClientMatrix(

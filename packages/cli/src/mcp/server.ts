@@ -62,13 +62,14 @@ import {
 import type { ParsedFileLoader } from "./types.js";
 import { createToolObserverFromEnvironment, type ToolObserver } from "./observability.js";
 import { outputSchemaForTool, requiredOutputFieldForTool } from "./output-schemas.js";
+import { registerA5sqlResources } from "./resources.js";
 
 export type McpServerOptions = {
   fileArg: string;
   toolProfile?: ToolProfile;
 };
 
-export const A5SQL_MCP_SERVER_VERSION = "0.10.3";
+export const A5SQL_MCP_SERVER_VERSION = "0.10.4";
 
 type ToolRegistrationConfig<
   InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
@@ -114,6 +115,7 @@ export async function createA5sqlMcpServer({
     version: A5SQL_MCP_SERVER_VERSION,
   });
   const observer = createToolObserverFromEnvironment();
+  registerA5sqlResources(server, { initialFile, getParsedFile });
   const registerProfiledTool = <
     InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
   >(

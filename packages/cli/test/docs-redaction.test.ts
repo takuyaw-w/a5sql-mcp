@@ -23,6 +23,21 @@ function extractToolProfileGuidance(text: string) {
   return text.slice(start, start + 1400);
 }
 
+function extractResourceGuidance(text: string) {
+  const startCandidates = [
+    text.indexOf("### MCP Resources"),
+    text.indexOf("0.10.4 の MCP Resource Gateway Pilot"),
+    text.indexOf("0.10.4 MCP Resource Gateway Pilot"),
+  ].filter((index) => index >= 0);
+  const start = startCandidates.length > 0 ? Math.min(...startCandidates) : -1;
+
+  if (start < 0) {
+    return "";
+  }
+
+  return text.slice(start, start + 2200);
+}
+
 function expectContainsAny(label: string, actual: string, expectedValues: string[]) {
   expect(
     expectedValues.some((expectedValue) => actual.includes(expectedValue)),
@@ -308,6 +323,35 @@ describe("public documentation redaction audit", () => {
       expect(text, `${relativePath} should document installed package gate`).toContain(
         "published:check",
       );
+    }
+  });
+
+  it("documents the 0.10.4 path-free MCP Resource boundary", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+
+    for (const { relativePath, text } of docs) {
+      const guidance = extractResourceGuidance(text);
+      expect(guidance, `${relativePath} should document 0.10.4 Resource guidance`).toContain(
+        "0.10.4",
+      );
+      expect(guidance).toContain("a5sql://configured-file/summary");
+      expect(guidance).toContain("a5sql://configured-file/schema-summary");
+      expect(guidance).toContain("summary");
+      expect(guidance).toContain("path");
+      expect(guidance).toContain("秘密情報");
+      expect(guidance).toContain("contentIsUntrusted");
+      expect(guidance).toContain("untrustedPayloadFields");
+      expect(guidance).toContain("tool-only");
+      expect(guidance).toContain("roots");
+      expect(guidance).toContain("--tool-profile");
+      expect(guidance).toContain("DB");
+      expect(guidance).toContain("SQL");
+      expect(guidance).toContain("ファイル");
     }
   });
 

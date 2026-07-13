@@ -71,6 +71,8 @@
 
 0.10.3 の Platform, Draft, Public Contract and CI Hardening では、text decoder は core の canonical implementation を使い、path dedupe は Windows だけ case-insensitive とする。model draft は PHP / Python の安全な identifier / literal と `syntaxValidation` metadata を返す。stable read-only 17 tool は MCP `outputSchema` と `schemaVersion` / `resultType` を持つ。connection count は exact / unknown total を区別し、未知の場合は `totalConnectionCount: null` とする。CLI 直実行は既定で recursive masking を行い、`--unsafe-raw-output` は MCP mode で受け付けない。PR / main CI の Ubuntu / Windows validation と tag publish 前の `published:check` を release contract として扱う。
 
+0.10.4 の MCP Resource Gateway Pilot では、`a5sql://configured-file/summary` と `.a5er` 専用の `a5sql://configured-file/schema-summary` を固定 URI の read-only Resource として公開する。Resource は summary-only とし、basename、absolute path、本文を含めない。A5:SQL 由来 payload は `contentIsUntrusted: true` と `untrustedPayloadFields` で未信頼として分類し、秘密情報は tool と同じ public masking boundary でマスクする。`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` は明示 `roots` / `A5SQL_MCP_ROOTS` が必要なため tool-only とし、root/path を Resource URI に埋め込まない。`--tool-profile` は Resource filtering に使わず、DB 接続、SQL 実行、ファイル書き込みの non-goal を維持する。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
