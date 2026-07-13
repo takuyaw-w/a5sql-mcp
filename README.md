@@ -4,6 +4,14 @@
 
 初期実装では安全性を優先し、A5:SQL の設定ファイルや接続先 DB への書き込み、DB への SQL 実行、資格情報の復号は行いません。
 
+ファイルを直接 JSON 化する場合は、秘密情報を再帰的にマスクした出力が既定です。
+
+```bash
+npx @takuyaw-w/a5sql-mcp /absolute/path/to/query.sql
+```
+
+`--unsafe-raw-output` はマスク前の parse 結果を stdout に出す明示 opt-in です。固定 warning が stderr に出ます。ローカルで内容を確認する場合に限り使用し、出力をログやチャットへそのまま共有しないでください。MCP mode ではこの option を指定できません。
+
 ---
 
 ## インストール方法
@@ -457,6 +465,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 0.10.1 Scoped Tool Surface / Client Profile では、既定の `--mcp <file>` 起動を `all` として維持しつつ、`--tool-profile core-read`、`--tool-profile schema-explore`、`--tool-profile draft-generation` で `tools/list` の表示を用途別に絞れるようにします。profile は tool 表示の調整であり、権限拡張や安全境界の代替ではありません。
 
 0.10.2 Contract Integrity, Structured Errors and Safe Observability では、`warnings`、`message`、`code`、`nextAction` を固定 guidance に限定し、A5:SQL / live schema / tool input 由来の可変値を未信頼の `warningDetails` に分離します。assetId の探索は `maxFiles`、`visitedFileCount`、`lookupTruncated`、`cutoffReason` を返し、探索打ち切りと確定した未発見を区別します。truncated `.a5er` は完全 schema として解析せず、SQL の部分解析は statement 総数・返却数・truncation・末尾不完全性を明示します。
+
+0.10.3 Platform, Draft, Public Contract and CI Hardening では、CLI / core の text decoder を統合し、Windows だけを case-insensitive path dedupe とします。Laravel / SQLAlchemy model draft は言語別の安全な identifier / string literal と `syntaxValidation` metadata を使います。stable read-only 17 tool は `schemaVersion` / `resultType` を必須とする MCP `outputSchema` を公開し、`list_a5sql_connections` は `knownConnectionCount`、nullable な `totalConnectionCount`、`totalConnectionCountIsExact`、visited / cutoff metadata で正確な total と未知の total を区別します。CLI 直実行の JSON は既定でマスクされ、`--unsafe-raw-output` だけが固定 stderr warning つきで raw parse 結果を返します。PR / main CI は Ubuntu / Windows で Node.js、PHP、Python を使った test と draft syntax check を実行し、tag publish は npm publish 前に `published:check` を通します。
 
 安全な tool call metadata が必要な場合だけ `A5SQL_MCP_OBSERVABILITY=stderr` を指定できます。stderr へ出すのは tool 名、process-local HMAC による input hash、latency、output size、固定 error code だけです。入力値、本文、秘密情報、絶対 path、例外 message は出しません。stdout は常に JSON-RPC 専用です。
 

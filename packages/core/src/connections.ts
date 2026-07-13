@@ -1,10 +1,15 @@
 import path from "node:path";
 
-import { searchA5sqlAssets } from "./assets.js";
+import { searchA5sqlAssetsWithMetadata } from "./assets.js";
 import { stableScopedId } from "./hash.js";
 import { hasSecretLikeKey, maskSensitiveText, maskValue } from "./mask.js";
 import { readTextFile } from "./text.js";
-import type { ConnectionCandidate, ConnectionField, ListConnectionsOptions } from "./types.js";
+import type {
+  ConnectionCandidate,
+  ConnectionField,
+  ListConnectionsOptions,
+  ListConnectionsResult,
+} from "./types.js";
 
 const CONNECTION_KEYS = new Map<string, keyof ConnectionCandidate["fields"]>([
   ["name", "name"],
@@ -35,8 +40,14 @@ const CANDIDATE_KINDS = ["config", "text", "er"] as const;
 export async function listA5sqlConnections(
   options: ListConnectionsOptions = {},
 ): Promise<ConnectionCandidate[]> {
+  return (await listA5sqlConnectionsWithMetadata(options)).connections;
+}
+
+export async function listA5sqlConnectionsWithMetadata(
+  options: ListConnectionsOptions = {},
+): Promise<ListConnectionsResult> {
   const limit = Math.max(1, Math.min(options.limit ?? 50, 200));
-  const assets = await searchA5sqlAssets({
+  const search = await searchA5sqlAssetsWithMetadata({
     roots: options.roots,
     kinds: [...CANDIDATE_KINDS],
     limit: 500,
@@ -44,11 +55,8 @@ export async function listA5sqlConnections(
     maxFileBytes: 512 * 1024,
   });
 
-  const results: ConnectionCandidate[] = [];
-  for (const asset of assets) {
-    if (results.length >= limit) {
-      break;
-    }
+  const knownConnections: ConnectionCandidate[] = [];
+  for (const asset of search.assets) {
     const decoded = await readTextFile(asset.path, 512 * 1024);
     if (decoded.encoding === "binary" || decoded.text.length === 0) {
       continue;
@@ -60,11 +68,23 @@ export async function listA5sqlConnections(
       options.revealNonSecret ?? false,
     );
     if (parsed) {
-      results.push(parsed);
+      knownConnections.push(parsed);
     }
   }
 
-  return results.sort((a, b) => b.confidence - a.confidence);
+  knownConnections.sort((a, b) => b.confidence - a.confidence);
+  const connections = knownConnections.slice(0, limit);
+  const totalConnectionCountIsExact = !search.truncated;
+  return {
+    connections,
+    knownConnectionCount: knownConnections.length,
+    totalConnectionCount: totalConnectionCountIsExact ? knownConnections.length : null,
+    totalConnectionCountIsExact,
+    returnedConnectionCount: connections.length,
+    truncated: search.truncated || connections.length < knownConnections.length,
+    visitedFileCount: search.visitedFileCount,
+    cutoffReason: search.cutoffReason,
+  };
 }
 
 export function extractConnectionCandidate(

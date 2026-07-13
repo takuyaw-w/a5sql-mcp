@@ -24,7 +24,7 @@ export async function detectA5sqlLocations(
 
   const includeDefaults = options.includeDefaults ?? true;
   if (!includeDefaults) {
-    const unique = dedupePaths(rawCandidates);
+    const unique = dedupePaths(rawCandidates, platform);
     const results: LocationCandidate[] = [];
     for (const candidate of unique) {
       results.push(await withAccessState(candidate));
@@ -78,7 +78,7 @@ export async function detectA5sqlLocations(
     }
   }
 
-  const unique = dedupePaths(rawCandidates);
+  const unique = dedupePaths(rawCandidates, platform);
   const results: LocationCandidate[] = [];
   for (const candidate of unique) {
     results.push(await withAccessState(candidate));
@@ -116,16 +116,17 @@ function wineUserDirs(homeDir: string, userName: string | undefined): string[] {
   return dirs;
 }
 
-function dedupePaths<T extends { path: string }>(items: T[]): T[] {
+function dedupePaths<T extends { path: string }>(items: T[], platform: NodeJS.Platform): T[] {
   const seen = new Set<string>();
   const results: T[] = [];
   for (const item of items) {
-    const key = path.resolve(item.path).toLocaleLowerCase();
+    const resolvedPath = path.resolve(item.path);
+    const key = platform === "win32" ? resolvedPath.toLocaleLowerCase("en-US") : resolvedPath;
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
-    results.push({ ...item, path: path.resolve(item.path) });
+    results.push({ ...item, path: resolvedPath });
   }
   return results;
 }

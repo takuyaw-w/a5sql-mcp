@@ -5,9 +5,14 @@ export {
   readA5sqlAssetWithMetadata,
   classifyAsset,
 } from "./assets.js";
-export { listA5sqlConnections, extractConnectionCandidate } from "./connections.js";
+export {
+  listA5sqlConnections,
+  listA5sqlConnectionsWithMetadata,
+  extractConnectionCandidate,
+} from "./connections.js";
 export { detectA5sqlLocations } from "./locations.js";
-export { maskSensitiveText, maskValue } from "./mask.js";
+export { decodeTextBuffer, looksBinary, readTextFile } from "./text.js";
+export { hasSecretLikeKey, maskSensitiveText, maskValue } from "./mask.js";
 export { parseA5sqlAsset, parseA5sqlAssetWithMetadata } from "./parse.js";
 export {
   parseA5erIni,
@@ -21,6 +26,7 @@ export type {
   ConnectionCandidate,
   DetectLocationOptions,
   ListConnectionsOptions,
+  ListConnectionsResult,
   LocationCandidate,
   ParseAssetOptions,
   ParseAssetLookupResult,
@@ -33,6 +39,7 @@ export type {
   SearchAssetsCutoffReason,
   SearchAssetsResult,
 } from "./types.js";
+export type { DecodedText, DecodeTextBufferOptions } from "./text.js";
 export type {
   ParsedA5erColumn,
   ParsedA5erDocument,

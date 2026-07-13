@@ -1,6 +1,14 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { extractConnectionCandidate } from "../src/connections.js";
+import {
+  extractConnectionCandidate,
+  listA5sqlConnections,
+  listA5sqlConnectionsWithMetadata,
+} from "../src/connections.js";
 
 describe("extractConnectionCandidate", () => {
   it("extracts connection-like fields without returning passwords", () => {
@@ -57,5 +65,55 @@ describe("extractConnectionCandidate", () => {
       "PostgreSQL;Server=db.internal.test;User ID=alice;Pwd=raw-password;Database=app",
     );
     expect(serialized).not.toContain("Server=db.internal.test;User ID=alice");
+  });
+});
+
+describe("listA5sqlConnectionsWithMetadata", () => {
+  it("reports an exact total after a complete scan while respecting the return limit", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "a5sql-mcp-connections-"));
+    await Promise.all(
+      ["one", "two", "three"].map((name) =>
+        writeFile(path.join(root, `${name}.ini`), `Name=${name}\nHost=localhost\nDatabase=app`),
+      ),
+    );
+
+    await expect(listA5sqlConnectionsWithMetadata({ roots: [root], limit: 1 })).resolves.toEqual(
+      expect.objectContaining({
+        knownConnectionCount: 3,
+        totalConnectionCount: 3,
+        totalConnectionCountIsExact: true,
+        returnedConnectionCount: 1,
+        truncated: true,
+        cutoffReason: null,
+      }),
+    );
+    await expect(listA5sqlConnections({ roots: [root], limit: 1 })).resolves.toHaveLength(1);
+  });
+
+  it("uses a nullable total when the asset scan is cut off", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "a5sql-mcp-connections-cutoff-"));
+    const files = path.join(root, "files");
+    await mkdir(files);
+    await Promise.all(
+      Array.from({ length: 501 }, (_, index) =>
+        writeFile(
+          path.join(files, `${String(index).padStart(3, "0")}.ini`),
+          `Name=db-${index}\nHost=localhost\nDatabase=app`,
+        ),
+      ),
+    );
+
+    const result = await listA5sqlConnectionsWithMetadata({ roots: [root], limit: 10 });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        knownConnectionCount: 500,
+        totalConnectionCount: null,
+        totalConnectionCountIsExact: false,
+        returnedConnectionCount: 10,
+        truncated: true,
+        cutoffReason: "limit_exceeded",
+      }),
+    );
   });
 });

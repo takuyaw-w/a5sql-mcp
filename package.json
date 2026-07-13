@@ -1,6 +1,6 @@
 {
   "name": "@takuyaw-w/a5sql-mcp-workspace",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "private": true,
   "keywords": [
     "a5er",
@@ -17,6 +17,7 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
+    "draft-syntax:check": "pnpm build && node packages/cli/scripts/draft-syntax-check.mjs",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",

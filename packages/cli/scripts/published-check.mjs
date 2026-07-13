@@ -34,6 +34,18 @@ const EXPECTED_TOOL_NAMES = [
   "suggest_schema_changes",
 ].sort();
 
+const EXPERIMENTAL_DRAFT_TOOL_NAMES = [
+  "generate_mermaid_er_diagram",
+  "generate_migration_plan",
+  "generate_model_files",
+  "generate_schema_markdown",
+  "generate_sql_select",
+].sort();
+
+const STABLE_TOOL_NAMES = EXPECTED_TOOL_NAMES.filter(
+  (toolName) => !EXPERIMENTAL_DRAFT_TOOL_NAMES.includes(toolName),
+);
+
 const CORE_READ_TOOL_NAMES = [
   "describe_a5sql_file",
   "detect_a5sql_locations",
@@ -111,6 +123,7 @@ async function main() {
     const toolsResult = await client.listTools();
     const actualToolNames = toolsResult.tools.map((tool) => tool.name).sort();
     assertToolSet("default published-style MCP tools/list", actualToolNames, EXPECTED_TOOL_NAMES);
+    assertPublishedOutputSchemas(toolsResult.tools);
 
     await assertInstalledBinToolProfile(binPath, tempRoot, sampleA5er, {
       label: "--tool-profile all published-style MCP tools/list",
@@ -145,8 +158,34 @@ async function main() {
     );
     await writeFile(path.join(adversarialRoot, "queries", "decoy.sql"), "select 1;\n", "utf8");
 
+    const exactConnectionsRoot = path.join(tempRoot, "exact-connections");
+    await mkdir(exactConnectionsRoot, { recursive: true });
+    await Promise.all(
+      ["one", "two"].map((name) =>
+        writeFile(
+          path.join(exactConnectionsRoot, `${name}.ini`),
+          `Name=${name}\nHost=localhost\nDatabase=app`,
+          "utf8",
+        ),
+      ),
+    );
+
+    const cutoffConnectionsRoot = path.join(tempRoot, "cutoff-connections");
+    await mkdir(cutoffConnectionsRoot, { recursive: true });
+    await Promise.all(
+      Array.from({ length: 501 }, (_, index) =>
+        writeFile(
+          path.join(cutoffConnectionsRoot, `${String(index).padStart(3, "0")}.ini`),
+          `Name=db-${index}\nHost=localhost\nDatabase=app`,
+          "utf8",
+        ),
+      ),
+    );
+
     await assertPublishedPackageClientMatrix(client, {
       adversarialRoot,
+      exactConnectionsRoot,
+      cutoffConnectionsRoot,
       hostileSqlPath,
       sampleA5er,
     });
@@ -228,6 +267,27 @@ function assertToolSet(label, actualToolNames, expectedToolNames) {
   }
 }
 
+function assertPublishedOutputSchemas(tools) {
+  const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
+  for (const toolName of STABLE_TOOL_NAMES) {
+    const schema = toolsByName.get(toolName)?.outputSchema;
+    if (!schema || schema.type !== "object") {
+      throw new Error(`${toolName} must publish a non-empty object outputSchema.`);
+    }
+    if (!schema.required?.includes("schemaVersion") || !schema.required?.includes("resultType")) {
+      throw new Error(`${toolName} outputSchema must require schemaVersion and resultType.`);
+    }
+    if (schema.required.length !== 3) {
+      throw new Error(`${toolName} outputSchema must require one tool-specific result field.`);
+    }
+  }
+  for (const toolName of EXPERIMENTAL_DRAFT_TOOL_NAMES) {
+    if (toolsByName.get(toolName)?.outputSchema !== undefined) {
+      throw new Error(`${toolName} must remain an experimental draft without stable outputSchema.`);
+    }
+  }
+}
+
 async function assertInstalledBinToolProfile(
   binPath,
   cwd,
@@ -257,7 +317,7 @@ async function listInstalledBinToolNames(binPath, cwd, sampleA5er, extraArgs = [
 
 async function assertPublishedPackageClientMatrix(
   client,
-  { adversarialRoot, hostileSqlPath, sampleA5er },
+  { adversarialRoot, exactConnectionsRoot, cutoffConnectionsRoot, hostileSqlPath, sampleA5er },
 ) {
   const rawSecrets = [
     { label: "sql password literal", value: "published-fixture-password" },
@@ -359,6 +419,32 @@ async function assertPublishedPackageClientMatrix(
   );
   assertNoRawSecrets("list_a5sql_connections", connectionsOutput, rawSecrets);
 
+  const exactConnectionsOutput = await callToolStructured(client, "list_a5sql_connections", {
+    roots: [exactConnectionsRoot],
+    limit: 1,
+  });
+  assertObjectIncludes("list_a5sql_connections exact total", exactConnectionsOutput, {
+    knownConnectionCount: 2,
+    totalConnectionCount: 2,
+    totalConnectionCountIsExact: true,
+    returnedConnectionCount: 1,
+    truncated: true,
+    cutoffReason: null,
+  });
+
+  const cutoffConnectionsOutput = await callToolStructured(client, "list_a5sql_connections", {
+    roots: [cutoffConnectionsRoot],
+    limit: 10,
+  });
+  assertObjectIncludes("list_a5sql_connections unknown total", cutoffConnectionsOutput, {
+    knownConnectionCount: 500,
+    totalConnectionCount: null,
+    totalConnectionCountIsExact: false,
+    returnedConnectionCount: 10,
+    truncated: true,
+    cutoffReason: "limit_exceeded",
+  });
+
   const cutoffOutput = await callToolStructured(client, "read_a5sql_asset", {
     roots: [adversarialRoot],
     assetId: "published-check-missing-asset",
@@ -430,6 +516,15 @@ async function callToolStructured(client, name, args) {
     Array.isArray(structuredContent)
   ) {
     throw new Error(`${name} did not return object structuredContent.`);
+  }
+
+  const textContent = result.content?.find((content) => content.type === "text")?.text;
+  if (typeof textContent !== "string") {
+    throw new Error(`${name} did not return text content alongside structuredContent.`);
+  }
+  const parsedText = JSON.parse(textContent);
+  if (JSON.stringify(parsedText) !== JSON.stringify(structuredContent)) {
+    throw new Error(`${name} content text and structuredContent diverged.`);
   }
 
   return structuredContent;

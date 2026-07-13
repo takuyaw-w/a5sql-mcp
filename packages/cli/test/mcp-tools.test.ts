@@ -825,10 +825,10 @@ describe("A5:ER MCP tool helpers", () => {
     expect(output.tableCount).toBe(1);
     expect(output.files[0]?.path).toBe("app/Models/User.php");
     expect(output.files[0]?.content).toContain("class User extends Model");
-    expect(output.files[0]?.content).toContain("protected $table = 'users';");
+    expect(output.files[0]?.content).toContain('protected $table = "users";');
     expect(output.files[0]?.content).toContain("public function orders()");
     expect(output.files[0]?.content).toContain(
-      "return $this->hasMany(Order::class, 'user_id', 'id');",
+      'return $this->hasMany(Order::class, "user_id", "id");',
     );
   });
 
@@ -850,6 +850,76 @@ describe("A5:ER MCP tool helpers", () => {
     expect(output.files[0]?.content).toContain("class User(Base):");
     expect(output.files[0]?.content).toContain('__tablename__ = "orders"');
     expect(output.files[0]?.content).toContain('ForeignKey("users.id")');
+  });
+
+  it("generates syntax-safe model identifiers and escaped physical names", async () => {
+    const parsed = await parseSampleA5er();
+    const tableTemplate = parsed.parsed.tables[0]!;
+    const columnTemplate = tableTemplate.columns[0]!;
+    const hostileNames = ["class", "123-orders", "注文", "foo-bar", "foo bar"];
+    parsed.parsed.tables = hostileNames.map((name, tableIndex) => ({
+      ...tableTemplate,
+      name,
+      columns:
+        tableIndex === 0
+          ? ["class", "123-id", "display-name", "display name", "quote'\\\n$", "注文"].map(
+              (columnName, columnIndex) => ({
+                ...columnTemplate,
+                name: columnName,
+                primaryKey: columnIndex === 0,
+              }),
+            )
+          : [{ ...columnTemplate, name: "id", primaryKey: true }],
+    }));
+    parsed.parsed.relationships = [];
+
+    const laravel = generateModelFiles(parsed, { framework: "laravel" }) as {
+      files: Array<{
+        path: string;
+        content: string;
+        syntaxValidation: Record<string, unknown>;
+      }>;
+    };
+    const sqlalchemy = generateModelFiles(parsed, { framework: "sqlalchemy" }) as {
+      files: Array<{
+        content: string;
+        syntaxValidation: Record<string, unknown>;
+      }>;
+    };
+
+    expect(new Set(laravel.files.map((file) => file.path)).size).toBe(laravel.files.length);
+    expect(
+      laravel.files.every((file) => /^app\/Models\/[A-Za-z_][A-Za-z0-9_]*\.php$/.test(file.path)),
+    ).toBe(true);
+    expect(laravel.files.every((file) => file.syntaxValidation.templateValidated === true)).toBe(
+      true,
+    );
+    expect(laravel.files[0]?.content).toContain('protected $table = "class";');
+    expect(laravel.files[0]?.content).toContain("quote'\\\\\\x0a\\\$");
+
+    const python = sqlalchemy.files[0]!;
+    const classNames = [
+      ...python.content.matchAll(/^class ([A-Za-z_][A-Za-z0-9_]*)\(Base\):$/gm),
+    ].map((match) => match[1]);
+    const firstClassBody =
+      python.content.split(`class ${classNames[0]}(Base):`)[1]?.split(/^class /m)[0] ?? "";
+    const attributes = [...firstClassBody.matchAll(/^    ([A-Za-z_][A-Za-z0-9_]*): Mapped/gm)].map(
+      (match) => match[1],
+    );
+    expect(new Set(classNames).size).toBe(hostileNames.length);
+    expect(new Set(attributes).size).toBe(attributes.length);
+    expect(classNames).not.toContain("class");
+    expect(attributes).not.toContain("class");
+    expect(python.content).toContain('mapped_column("display-name",');
+    expect(python.content).toContain('mapped_column("display name",');
+    expect(python.syntaxValidation).toEqual(
+      expect.objectContaining({
+        language: "python",
+        templateValidated: true,
+        identifiersValidated: true,
+        literalsEscaped: true,
+      }),
+    );
   });
 
   it("handles large a5er files with paging and bounded generated output", async () => {

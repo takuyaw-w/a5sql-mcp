@@ -109,6 +109,12 @@ describe("A5:SQL MCP server smoke", () => {
     expect(parseCliArguments(["schema.a5er"])).toEqual({
       mode: "parse",
       fileArg: "schema.a5er",
+      unsafeRawOutput: false,
+    });
+    expect(parseCliArguments(["schema.a5er", "--unsafe-raw-output"])).toEqual({
+      mode: "parse",
+      fileArg: "schema.a5er",
+      unsafeRawOutput: true,
     });
     expect(parseCliArguments(["--help"])).toEqual({ mode: "help", exitCode: 0 });
     expect(parseCliArguments([])).toEqual({ mode: "help", exitCode: 1 });
@@ -120,6 +126,12 @@ describe("A5:SQL MCP server smoke", () => {
     );
     expect(() => parseCliArguments(["--mcp", "schema.a5er", "--unknown"])).toThrow(
       "Unknown MCP option: --unknown",
+    );
+    expect(() => parseCliArguments(["schema.a5er", "--unknown"])).toThrow(
+      "Unknown direct-mode option: --unknown",
+    );
+    expect(() => parseCliArguments(["--mcp", "schema.a5er", "--unsafe-raw-output"])).toThrow(
+      "Unknown MCP option: --unsafe-raw-output",
     );
   });
 
@@ -219,8 +231,8 @@ describe("A5:SQL MCP server smoke", () => {
     }
   });
 
-  it("reports 0.10.2 version metadata", async () => {
-    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.10.2");
+  it("reports 0.10.3 version metadata", async () => {
+    expect(A5SQL_MCP_SERVER_VERSION).toBe("0.10.3");
 
     const packageJsonPaths = [
       new URL("../../../package.json", import.meta.url),
@@ -235,10 +247,10 @@ describe("A5:SQL MCP server smoke", () => {
     );
 
     expect(packageJsons.map((packageJson) => packageJson.version)).toEqual([
-      "0.10.2",
-      "0.10.2",
-      "0.10.2",
-      "0.10.2",
+      "0.10.3",
+      "0.10.3",
+      "0.10.3",
+      "0.10.3",
     ]);
   });
 
@@ -328,9 +340,20 @@ describe("A5:SQL MCP server smoke", () => {
         expect(toolsByName.get(toolName)?.description ?? "").not.toContain(
           "experimental draft tool",
         );
+        expect(toolsByName.get(toolName)?.outputSchema, `${toolName} needs outputSchema`).toEqual(
+          expect.objectContaining({
+            type: "object",
+            required: expect.arrayContaining(["schemaVersion", "resultType"]),
+          }),
+        );
+        expect(
+          toolsByName.get(toolName)?.outputSchema?.required,
+          `${toolName} needs a tool-specific required field`,
+        ).toHaveLength(3);
       }
       for (const toolName of experimentalDraftTools) {
         expect(toolsByName.get(toolName)?.description ?? "").toContain("experimental draft tool");
+        expect(toolsByName.get(toolName)?.outputSchema).toBeUndefined();
       }
       for (const toolName of expectedToolNames) {
         expectDescriptionContains(toolName, ["MCP"]);

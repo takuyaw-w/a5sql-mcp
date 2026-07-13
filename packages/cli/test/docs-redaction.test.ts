@@ -284,6 +284,33 @@ describe("public documentation redaction audit", () => {
     }
   });
 
+  it("documents the 0.10.3 platform and public contract hardening boundary", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.10.3`).toContain("0.10.3");
+      expect(text, `${relativePath} should document output schemas`).toContain("outputSchema");
+      expect(text, `${relativePath} should document syntax validation`).toContain(
+        "syntaxValidation",
+      );
+      expect(text, `${relativePath} should document unknown totals`).toContain(
+        "totalConnectionCount",
+      );
+      expect(text, `${relativePath} should document unsafe direct output`).toContain(
+        "--unsafe-raw-output",
+      );
+      expect(text, `${relativePath} should document Windows validation`).toContain("Windows");
+      expect(text, `${relativePath} should document installed package gate`).toContain(
+        "published:check",
+      );
+    }
+  });
+
   it("documents the 0.9.13 docs and onboarding freeze boundaries", async () => {
     const docs = await Promise.all(
       PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({

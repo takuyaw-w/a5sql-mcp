@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
 import { createReadA5sqlFileHandler } from "../src/mcp/tool-handlers.js";
-import { isCliEntrypoint, parseFile } from "../src/index.js";
+import { isCliEntrypoint, maskCliOutput, parseFile } from "../src/index.js";
+
+const execFileAsync = promisify(execFile);
 
 describe("a5sql-mcp cli", () => {
   it("parses an a5er file path argument", async () => {
@@ -180,6 +184,48 @@ describe("a5sql-mcp cli", () => {
     await symlink(entrypoint, binPath);
 
     expect(isCliEntrypoint(binPath, pathToFileURL(entrypoint).href)).toBe(true);
+  });
+
+  it("masks nested direct-mode output without changing its JSON structure", () => {
+    const output = maskCliOutput({
+      kind: "sql",
+      parsed: {
+        text: [
+          "password=raw-password",
+          "postgres://alice:raw-password@localhost/app",
+          "-----BEGIN PRIVATE KEY-----\nraw-private-key\n-----END PRIVATE KEY-----",
+        ].join("\n"),
+        token: "raw-token",
+      },
+    });
+
+    expect(output).toMatchObject({ kind: "sql", parsed: { token: "***" } });
+    const serialized = JSON.stringify(output);
+    expect(serialized).not.toContain("raw-password");
+    expect(serialized).not.toContain("raw-token");
+    expect(serialized).not.toContain("raw-private-key");
+    expect(() => JSON.parse(serialized)).not.toThrow();
+  });
+
+  it("keeps direct CLI stdout masked unless unsafe raw output is explicitly requested", async () => {
+    const dir = path.join(os.tmpdir(), `a5sql-mcp-cli-output-${randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, "secret.sql");
+    await writeFile(filePath, "select 'password=raw-password' as value;", "utf8");
+    const entrypoint = fileURLToPath(new URL("../dist/index.js", import.meta.url));
+
+    const safe = await execFileAsync(process.execPath, [entrypoint, filePath]);
+    expect(() => JSON.parse(safe.stdout)).not.toThrow();
+    expect(safe.stdout).not.toContain("raw-password");
+    expect(safe.stderr).toBe("");
+
+    const unsafe = await execFileAsync(process.execPath, [
+      entrypoint,
+      filePath,
+      "--unsafe-raw-output",
+    ]);
+    expect(unsafe.stdout).toContain("raw-password");
+    expect(unsafe.stderr).toContain("--unsafe-raw-output exposes unmasked local file content");
   });
 });
 

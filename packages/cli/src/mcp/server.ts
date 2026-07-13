@@ -61,22 +61,22 @@ import {
 } from "./tool-profiles.js";
 import type { ParsedFileLoader } from "./types.js";
 import { createToolObserverFromEnvironment, type ToolObserver } from "./observability.js";
+import { outputSchemaForTool, requiredOutputFieldForTool } from "./output-schemas.js";
 
 export type McpServerOptions = {
   fileArg: string;
   toolProfile?: ToolProfile;
 };
 
-export const A5SQL_MCP_SERVER_VERSION = "0.10.2";
+export const A5SQL_MCP_SERVER_VERSION = "0.10.3";
 
 type ToolRegistrationConfig<
-  OutputArgs extends ZodRawShapeCompat | AnySchema,
   InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
 > = {
   title?: string;
   description?: string;
   inputSchema?: InputArgs;
-  outputSchema?: OutputArgs;
+  outputSchema?: ZodRawShapeCompat | AnySchema;
 };
 
 export async function runMcpServer({
@@ -115,18 +115,18 @@ export async function createA5sqlMcpServer({
   });
   const observer = createToolObserverFromEnvironment();
   const registerProfiledTool = <
-    OutputArgs extends ZodRawShapeCompat | AnySchema,
     InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
   >(
     toolName: A5sqlMcpToolName,
-    toolConfig: ToolRegistrationConfig<OutputArgs, InputArgs>,
+    toolConfig: ToolRegistrationConfig<InputArgs>,
     handler: ToolCallback<InputArgs>,
   ) => {
     if (shouldRegisterToolForProfile(toolName, toolProfile)) {
+      const outputSchema = outputSchemaForTool(toolName);
       server.registerTool(
         toolName,
-        toolConfig,
-        observer ? observer.wrap(toolName, handler) : handler,
+        outputSchema ? { ...toolConfig, outputSchema } : toolConfig,
+        observedToolHandler(toolName, handler, observer),
       );
     }
   };
@@ -253,18 +253,18 @@ function registerA5erTools(
   observer?: ToolObserver,
 ): void {
   const registerProfiledTool = <
-    OutputArgs extends ZodRawShapeCompat | AnySchema,
     InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
   >(
     toolName: A5sqlMcpToolName,
-    toolConfig: ToolRegistrationConfig<OutputArgs, InputArgs>,
+    toolConfig: ToolRegistrationConfig<InputArgs>,
     handler: ToolCallback<InputArgs>,
   ) => {
     if (shouldRegisterToolForProfile(toolName, toolProfile)) {
+      const outputSchema = outputSchemaForTool(toolName);
       server.registerTool(
         toolName,
-        toolConfig,
-        observer ? observer.wrap(toolName, handler) : handler,
+        outputSchema ? { ...toolConfig, outputSchema } : toolConfig,
+        observedToolHandler(toolName, handler, observer),
       );
     }
   };
@@ -422,6 +422,51 @@ function registerA5erTools(
     },
     createGenerateMigrationPlanHandler(getParsedFile),
   );
+}
+
+function observedToolHandler<InputArgs extends undefined | ZodRawShapeCompat | AnySchema>(
+  toolName: A5sqlMcpToolName,
+  handler: ToolCallback<InputArgs>,
+  observer?: ToolObserver,
+): ToolCallback<InputArgs> {
+  const contractedHandler = withRequiredStableOutputField(toolName, handler);
+  return observer ? observer.wrap(toolName, contractedHandler) : contractedHandler;
+}
+
+function withRequiredStableOutputField<InputArgs extends undefined | ZodRawShapeCompat | AnySchema>(
+  toolName: A5sqlMcpToolName,
+  handler: ToolCallback<InputArgs>,
+): ToolCallback<InputArgs> {
+  const requiredField = requiredOutputFieldForTool(toolName);
+  if (!requiredField) {
+    return handler;
+  }
+  const invoke = handler as unknown as (...args: unknown[]) => unknown;
+  return (async (...args: unknown[]) => {
+    const result = await invoke(...args);
+    if (!result || typeof result !== "object" || !("structuredContent" in result)) {
+      return result;
+    }
+    const structuredContent = result.structuredContent;
+    if (
+      !structuredContent ||
+      typeof structuredContent !== "object" ||
+      Array.isArray(structuredContent) ||
+      Object.hasOwn(structuredContent, requiredField)
+    ) {
+      return result;
+    }
+    const contractedContent = { ...structuredContent, [requiredField]: null };
+    const content =
+      "content" in result && Array.isArray(result.content)
+        ? result.content.map((item) =>
+            item && typeof item === "object" && "type" in item && item.type === "text"
+              ? { ...item, text: JSON.stringify(contractedContent, null, 2) }
+              : item,
+          )
+        : [];
+    return { ...result, content, structuredContent: contractedContent };
+  }) as ToolCallback<InputArgs>;
 }
 
 export * from "./tool-outputs.js";

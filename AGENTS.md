@@ -69,6 +69,8 @@
 
 0.10.2 の Contract Integrity, Structured Errors and Safe Observability では、trusted guidance を固定 code に限定し、可変値を未信頼の `warningDetails` に分離する。asset lookup の `maxFiles` / visited count / cutoff、source byte metadata、truncated `.a5er` の fail-closed、SQL statement count、lossless scalar を contract として扱う。`A5SQL_MCP_OBSERVABILITY=stderr` は明示 opt-in であり、tool 名、process-local HMAC input hash、latency、output size、固定 error code 以外を log に出さない。stdout は JSON-RPC 専用とする。
 
+0.10.3 の Platform, Draft, Public Contract and CI Hardening では、text decoder は core の canonical implementation を使い、path dedupe は Windows だけ case-insensitive とする。model draft は PHP / Python の安全な identifier / literal と `syntaxValidation` metadata を返す。stable read-only 17 tool は MCP `outputSchema` と `schemaVersion` / `resultType` を持つ。connection count は exact / unknown total を区別し、未知の場合は `totalConnectionCount: null` とする。CLI 直実行は既定で recursive masking を行い、`--unsafe-raw-output` は MCP mode で受け付けない。PR / main CI の Ubuntu / Windows validation と tag publish 前の `published:check` を release contract として扱う。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。

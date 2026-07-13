@@ -156,3 +156,14 @@ export type ListConnectionsOptions = {
   limit?: number;
   revealNonSecret?: boolean;
 };
+
+export type ListConnectionsResult = {
+  connections: ConnectionCandidate[];
+  knownConnectionCount: number;
+  totalConnectionCount: number | null;
+  totalConnectionCountIsExact: boolean;
+  returnedConnectionCount: number;
+  truncated: boolean;
+  visitedFileCount: number;
+  cutoffReason: SearchAssetsCutoffReason | null;
+};

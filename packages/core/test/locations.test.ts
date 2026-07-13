@@ -77,4 +77,39 @@ describe("detectA5sqlLocations", () => {
       }),
     ]);
   });
+
+  it("preserves differently cased paths on case-sensitive platforms", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "a5sql-mcp-location-case-"));
+    const upper = path.join(root, "CaseRoot");
+    const lower = path.join(root, "caseroot");
+    await Promise.all([mkdir(upper), mkdir(lower)]);
+
+    const candidates = await detectA5sqlLocations({
+      extraRoots: [upper, lower],
+      env: {},
+      homeDir: root,
+      platform: "linux",
+      includeDefaults: false,
+    });
+
+    expect(candidates.map((candidate) => candidate.path)).toEqual([upper, lower]);
+  });
+
+  it("deduplicates differently cased paths on Windows", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "a5sql-mcp-location-case-"));
+    const upper = path.join(root, "CaseRoot");
+    const lower = path.join(root, "caseroot");
+    await mkdir(upper);
+
+    const candidates = await detectA5sqlLocations({
+      extraRoots: [upper, lower],
+      env: {},
+      homeDir: root,
+      platform: "win32",
+      includeDefaults: false,
+    });
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.path).toBe(upper);
+  });
 });

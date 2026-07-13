@@ -5,13 +5,18 @@ export type DecodedText = {
   text: string;
   encoding: string;
   bytesRead: number;
+  sizeBytes: number;
   truncated: boolean;
+};
+
+export type DecodeTextBufferOptions = {
+  sourceTruncated?: boolean;
 };
 
 const TEXT_ENCODINGS = ["utf-8", "shift_jis", "utf-16le"] as const;
 const UTF8_BOM = [0xef, 0xbb, 0xbf] as const;
 const UTF16LE_BOM = [0xff, 0xfe] as const;
-const MIN_UTF16LE_HEURISTIC_BYTES = 16;
+const MIN_UTF16LE_HEURISTIC_BYTES = 4;
 
 export function looksBinary(buffer: Buffer): boolean {
   if (buffer.length === 0) {
@@ -30,7 +35,10 @@ export function looksBinary(buffer: Buffer): boolean {
   return nulCount > sample.length * 0.1;
 }
 
-export async function readTextFile(filePath: string, maxBytes: number): Promise<DecodedText> {
+export async function readTextFile(
+  filePath: string,
+  maxBytes = Number.POSITIVE_INFINITY,
+): Promise<DecodedText> {
   const file = await open(filePath, "r");
   try {
     const fileStat = await file.stat();
@@ -40,10 +48,11 @@ export async function readTextFile(filePath: string, maxBytes: number): Promise<
     const buffer = slice.subarray(0, bytesRead);
     const truncated = fileStat.size > bytesRead;
 
-    const decoded = decodeTextBuffer(buffer);
+    const decoded = decodeTextBuffer(buffer, { sourceTruncated: truncated });
     return {
       ...decoded,
       bytesRead: buffer.length,
+      sizeBytes: fileStat.size,
       truncated,
     };
   } finally {
@@ -51,7 +60,10 @@ export async function readTextFile(filePath: string, maxBytes: number): Promise<
   }
 }
 
-function decodeTextBuffer(buffer: Buffer): Omit<DecodedText, "bytesRead" | "truncated"> {
+export function decodeTextBuffer(
+  buffer: Buffer,
+  options: DecodeTextBufferOptions = {},
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> {
   if (startsWithBytes(buffer, UTF8_BOM)) {
     return decodeWithEncoding(buffer.subarray(UTF8_BOM.length), "utf-8");
   }
@@ -68,6 +80,13 @@ function decodeTextBuffer(buffer: Buffer): Omit<DecodedText, "bytesRead" | "trun
     };
   }
 
+  if (options.sourceTruncated) {
+    const decoded = tryDecodeTruncatedUtf8(buffer);
+    if (decoded) {
+      return decoded;
+    }
+  }
+
   for (const encoding of TEXT_ENCODINGS) {
     const decoded = tryDecodeWithEncoding(buffer, encoding);
     if (decoded) {
@@ -81,7 +100,7 @@ function decodeTextBuffer(buffer: Buffer): Omit<DecodedText, "bytesRead" | "trun
 function tryDecodeWithEncoding(
   buffer: Buffer,
   encoding: (typeof TEXT_ENCODINGS)[number],
-): Omit<DecodedText, "bytesRead" | "truncated"> | null {
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> | null {
   try {
     const decoder = new TextDecoder(encoding, { fatal: encoding !== "shift_jis" });
     const text = decoder.decode(buffer);
@@ -100,13 +119,27 @@ function tryDecodeWithEncoding(
 function decodeWithEncoding(
   buffer: Buffer,
   encoding: string,
-): Omit<DecodedText, "bytesRead" | "truncated"> {
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> {
   const decoderEncoding = encoding === "utf-8-lossy" ? "utf-8" : encoding;
   const decoder = new TextDecoder(decoderEncoding, { fatal: false });
   return {
     text: stripBom(decoder.decode(buffer)),
     encoding,
   };
+}
+
+function tryDecodeTruncatedUtf8(
+  buffer: Buffer,
+): Omit<DecodedText, "bytesRead" | "sizeBytes" | "truncated"> | null {
+  try {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    return {
+      text: stripBom(decoder.decode(buffer, { stream: true })),
+      encoding: "utf-8",
+    };
+  } catch {
+    return null;
+  }
 }
 
 function startsWithBytes(buffer: Buffer, prefix: readonly number[]): boolean {
@@ -117,7 +150,7 @@ function startsWithBytes(buffer: Buffer, prefix: readonly number[]): boolean {
 }
 
 function looksUtf16Le(buffer: Buffer): boolean {
-  if (buffer.length < MIN_UTF16LE_HEURISTIC_BYTES) {
+  if (buffer.length < MIN_UTF16LE_HEURISTIC_BYTES || buffer.length % 2 !== 0) {
     return false;
   }
   const sampleLength = Math.min(buffer.length, 4096);
@@ -141,7 +174,8 @@ function looksUtf16Le(buffer: Buffer): boolean {
     }
   }
   return (
-    oddNulCount > sampleLength * 0.2 &&
+    oddNulCount >= 2 &&
+    oddNulCount >= sampleLength * 0.2 &&
     evenNulCount < sampleLength * 0.05 &&
     nonNulCount > 0 &&
     printableNonNulCount / nonNulCount >= 0.85

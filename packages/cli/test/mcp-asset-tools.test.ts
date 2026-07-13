@@ -135,11 +135,15 @@ describe("A5:SQL asset MCP tools", () => {
       tableName: "users",
     });
     const expectedTablesOutput = {
+      schemaVersion: "0.10.3",
+      resultType: "success",
       filePath: sqlPath,
       kind: "sql",
       tables: [],
     };
     const expectedConfiguredFileIsNotA5erOutput = {
+      schemaVersion: "0.10.3",
+      resultType: "not_found",
       found: false,
       filePath: sqlPath,
       kind: "sql",
@@ -300,7 +304,9 @@ describe("A5:SQL asset MCP tools", () => {
       warnings: ["roots_required"],
     });
     expect(connections.structuredContent).toMatchObject({
-      totalConnectionCount: 0,
+      knownConnectionCount: 0,
+      totalConnectionCount: null,
+      totalConnectionCountIsExact: false,
       returnedConnectionCount: 0,
       code: "roots_required",
       warnings: ["roots_required"],
@@ -475,7 +481,9 @@ describe("A5:SQL asset MCP tools", () => {
     });
 
     expect(result.structuredContent).toMatchObject({
+      knownConnectionCount: 1,
       totalConnectionCount: 1,
+      totalConnectionCountIsExact: true,
       returnedConnectionCount: 1,
       truncated: false,
       contentIsUntrusted: true,

@@ -3,15 +3,35 @@ import { isA5erParsed, isRecognizedA5erParsed, unrecognizedA5erResult } from "./
 import type { A5erCliResult, JsonObject, ParsedFileLoader } from "./types.js";
 
 export function jsonResult<T extends JsonObject>(output: T) {
+  const structuredOutput = {
+    schemaVersion: "0.10.3",
+    resultType: classifyResultType(output),
+    ...output,
+  };
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(output, null, 2),
+        text: JSON.stringify(structuredOutput, null, 2),
       },
     ],
-    structuredContent: output,
+    structuredContent: structuredOutput,
   };
+}
+
+function classifyResultType(
+  output: JsonObject,
+): "success" | "error" | "not_found" | "unrecognized" {
+  if (typeof output.code === "string") {
+    return "error";
+  }
+  if (output.parseStatus === "unrecognized") {
+    return "unrecognized";
+  }
+  if (output.found === false) {
+    return "not_found";
+  }
+  return "success";
 }
 
 export function structuredErrorResult<

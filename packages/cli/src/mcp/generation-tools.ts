@@ -13,6 +13,15 @@ import {
   unrecognizedA5erResult,
 } from "./a5er-output-utils.js";
 import { withDraftOutputContract } from "./output-contract.js";
+import {
+  allocatePhpClassIdentifiers,
+  allocatePhpMethodIdentifiers,
+  allocatePythonAttributeIdentifiers,
+  allocatePythonClassIdentifiers,
+  phpStringLiteral,
+  pythonStringLiteral,
+  syntaxValidationMetadata,
+} from "./model-codegen-safety.js";
 import type {
   LiveSchemaColumn,
   LiveSchemaDocument,
@@ -511,7 +520,7 @@ export function generateModelFiles(
 
   const files =
     options.framework === "laravel"
-      ? tables.map((table) => generateLaravelModelFile(table, result.parsed.relationships))
+      ? generateLaravelModelFiles(tables, result.parsed.tables, result.parsed.relationships)
       : [generateSqlAlchemyModelsFile(tables, result.parsed.relationships)];
 
   return withGenerationDraftDisclosure({
@@ -875,18 +884,38 @@ function markdownCell(value: string | undefined): string {
   return (value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
+function generateLaravelModelFiles(
+  tables: ParsedA5erTable[],
+  allTables: ParsedA5erTable[],
+  relationships: ParsedA5erRelationship[],
+): JsonObject[] {
+  const allClassNames = allocatePhpClassIdentifiers(allTables.map((table) => table.name));
+  const classNamesByTable = new Map(
+    allTables.map((table, index) => [table.name, allClassNames[index]!] as const),
+  );
+  return tables.map((table) =>
+    generateLaravelModelFile(
+      table,
+      relationships,
+      classNamesByTable.get(table.name)!,
+      classNamesByTable,
+    ),
+  );
+}
+
 function generateLaravelModelFile(
   table: ParsedA5erTable,
   relationships: ParsedA5erRelationship[],
+  className: string,
+  classNamesByTable: Map<string, string>,
 ): JsonObject {
-  const className = modelClassName(table.name);
   const fillableColumns = table.columns
     .filter((column) => !column.primaryKey)
     .map((column) => column.name);
   const casts = table.columns
     .map((column) => [column.name, laravelCast(column)] as const)
     .filter((entry): entry is readonly [string, string] => entry[1] !== undefined);
-  const relationMethods = laravelRelationMethods(table, relationships);
+  const relationMethods = laravelRelationMethods(table, relationships, classNamesByTable);
   const lines = [
     "<?php",
     "",
@@ -896,7 +925,7 @@ function generateLaravelModelFile(
     "",
     `class ${className} extends Model`,
     "{",
-    `    protected $table = '${table.name}';`,
+    `    protected $table = ${phpStringLiteral(table.name)};`,
     "",
     "    public $timestamps = false;",
     "",
@@ -911,6 +940,7 @@ function generateLaravelModelFile(
     path: `app/Models/${className}.php`,
     tableName: table.name,
     content: lines.join("\n"),
+    syntaxValidation: syntaxValidationMetadata("php"),
   };
 }
 
@@ -919,6 +949,7 @@ function generateSqlAlchemyModelsFile(
   relationships: ParsedA5erRelationship[],
 ): JsonObject {
   const relationshipForeignKeys = sqlAlchemyForeignKeyMap(relationships);
+  const classNames = allocatePythonClassIdentifiers(tables.map((table) => table.name));
   const imports = new Set<string>(["DeclarativeBase", "Mapped", "mapped_column"]);
   const typeImports = new Set<string>();
   const lines = [
@@ -933,31 +964,38 @@ function generateSqlAlchemyModelsFile(
     "",
   ];
 
-  for (const table of tables) {
+  for (const [tableIndex, table] of tables.entries()) {
     lines.push(
       "",
-      `class ${modelClassName(table.name)}(Base):`,
-      `    __tablename__ = "${table.name}"`,
+      `class ${classNames[tableIndex]!}(Base):`,
+      `    __tablename__ = ${pythonStringLiteral(table.name)}`,
     );
     if (table.columns.length === 0) {
       lines.push("    pass", "");
       continue;
     }
-    for (const column of table.columns) {
+    const attributeNames = allocatePythonAttributeIdentifiers(
+      table.columns.map((column) => column.name),
+    );
+    for (const [columnIndex, column] of table.columns.entries()) {
       const mappedType = sqlAlchemyType(column.dataType);
       imports.add(mappedType.sqlalchemyType);
       typeImports.add(mappedType.pythonType);
-      const args = [`${mappedType.sqlalchemyType}()`];
+      const attributeName = attributeNames[columnIndex]!;
+      const args = [
+        ...(attributeName === column.name ? [] : [pythonStringLiteral(column.name)]),
+        `${mappedType.sqlalchemyType}()`,
+      ];
       const foreignKey = relationshipForeignKeys.get(`${table.name}.${column.name}`);
       if (foreignKey) {
-        args.push(`ForeignKey("${foreignKey}")`);
+        args.push(`ForeignKey(${pythonStringLiteral(foreignKey)})`);
       }
       const options = [
         column.primaryKey ? "primary_key=True" : undefined,
         column.nullable === false ? "nullable=False" : undefined,
       ].filter((value): value is string => value !== undefined);
       lines.push(
-        `    ${column.name}: Mapped[${mappedType.pythonType}] = mapped_column(${[...args, ...options].join(", ")})`,
+        `    ${attributeName}: Mapped[${mappedType.pythonType}] = mapped_column(${[...args, ...options].join(", ")})`,
       );
     }
     lines.push("");
@@ -972,6 +1010,7 @@ function generateSqlAlchemyModelsFile(
     path: "models.py",
     tableName: undefined,
     content: lines.join("\n"),
+    syntaxValidation: syntaxValidationMetadata("python"),
   };
 }
 
@@ -981,7 +1020,7 @@ function phpArrayProperty(propertyName: string, values: string[]): string[] {
   }
   return [
     `    protected $${propertyName} = [`,
-    ...values.map((value) => `        '${value}',`),
+    ...values.map((value) => `        ${phpStringLiteral(value)},`),
     "    ];",
   ];
 }
@@ -995,7 +1034,9 @@ function phpAssocArrayProperty(
   }
   return [
     `    protected $${propertyName} = [`,
-    ...values.map(([key, value]) => `        '${key}' => '${value}',`),
+    ...values.map(
+      ([key, value]) => `        ${phpStringLiteral(key)} => ${phpStringLiteral(value)},`,
+    ),
     "    ];",
   ];
 }
@@ -1003,35 +1044,48 @@ function phpAssocArrayProperty(
 function laravelRelationMethods(
   table: ParsedA5erTable,
   relationships: ParsedA5erRelationship[],
+  classNamesByTable: Map<string, string>,
 ): string[] {
   const methods: string[] = [];
+  const relationNames: string[] = [];
+  for (const relationship of relationships) {
+    if (relationship.entity1 === table.name && relationship.entity2) {
+      relationNames.push(relationship.entity2);
+    }
+    if (relationship.entity2 === table.name && relationship.entity1) {
+      relationNames.push(relationship.entity1);
+    }
+  }
+  const methodNames = allocatePhpMethodIdentifiers(relationNames);
+  let methodIndex = 0;
   for (const relationship of relationships) {
     if (!relationship.entity1 || !relationship.entity2) {
       continue;
     }
     if (relationship.entity1 === table.name) {
       const methodType = relationship.relationType2 === 3 ? "hasMany" : "hasOne";
-      const relatedClass = modelClassName(relationship.entity2);
-      const methodName =
-        methodType === "hasMany"
-          ? pluralCamelCase(relationship.entity2)
-          : camelCase(relationship.entity2);
+      const relatedClass =
+        classNamesByTable.get(relationship.entity2) ??
+        allocatePhpClassIdentifiers([relationship.entity2])[0]!;
+      const methodName = methodNames[methodIndex++]!;
       methods.push(
         "",
         `    public function ${methodName}()`,
         "    {",
-        `        return $this->${methodType}(${relatedClass}::class, '${relationship.fields2[0] ?? "id"}', '${relationship.fields1[0] ?? "id"}');`,
+        `        return $this->${methodType}(${relatedClass}::class, ${phpStringLiteral(relationship.fields2[0] ?? "id")}, ${phpStringLiteral(relationship.fields1[0] ?? "id")});`,
         "    }",
       );
     }
     if (relationship.entity2 === table.name) {
-      const relatedClass = modelClassName(relationship.entity1);
-      const methodName = camelCase(relationship.entity1);
+      const relatedClass =
+        classNamesByTable.get(relationship.entity1) ??
+        allocatePhpClassIdentifiers([relationship.entity1])[0]!;
+      const methodName = methodNames[methodIndex++]!;
       methods.push(
         "",
         `    public function ${methodName}()`,
         "    {",
-        `        return $this->belongsTo(${relatedClass}::class, '${relationship.fields2[0] ?? "id"}', '${relationship.fields1[0] ?? "id"}');`,
+        `        return $this->belongsTo(${relatedClass}::class, ${phpStringLiteral(relationship.fields2[0] ?? "id")}, ${phpStringLiteral(relationship.fields1[0] ?? "id")});`,
         "    }",
       );
     }
@@ -1105,39 +1159,4 @@ function sqlAlchemyForeignKeyMap(relationships: ParsedA5erRelationship[]): Map<s
     }
   }
   return foreignKeys;
-}
-
-function modelClassName(tableName: string): string {
-  return toWords(singularize(tableName))
-    .map((word) => word[0]!.toLocaleUpperCase() + word.slice(1))
-    .join("");
-}
-
-function camelCase(tableName: string): string {
-  const className = modelClassName(tableName);
-  return className[0]!.toLocaleLowerCase() + className.slice(1);
-}
-
-function pluralCamelCase(tableName: string): string {
-  const words = toWords(tableName);
-  const className = words.map((word) => word[0]!.toLocaleUpperCase() + word.slice(1)).join("");
-  return className[0]!.toLocaleLowerCase() + className.slice(1);
-}
-
-function toWords(value: string): string[] {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .split(/[^A-Za-z0-9]+/)
-    .filter(Boolean)
-    .map((word) => word.toLocaleLowerCase());
-}
-
-function singularize(value: string): string {
-  if (value.endsWith("ies")) {
-    return `${value.slice(0, -3)}y`;
-  }
-  if (value.endsWith("s") && !value.endsWith("ss")) {
-    return value.slice(0, -1);
-  }
-  return value;
 }

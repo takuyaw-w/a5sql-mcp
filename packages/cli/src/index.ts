@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseA5erIni, parseSqlDocument } from "@takuyaw-w/a5sql-mcp-parser";
+import { hasSecretLikeKey, maskSensitiveText } from "@takuyaw-w/a5sql-mcp-core";
 
 import {
   DEFAULT_TOOL_PROFILE,
@@ -36,8 +37,11 @@ export type ParseFileOptions = {
 
 export type CliArguments =
   | { mode: "help"; exitCode: 0 | 1 }
-  | { mode: "parse"; fileArg: string }
+  | { mode: "parse"; fileArg: string; unsafeRawOutput: boolean }
   | { mode: "mcp"; fileArg: string; toolProfile: ToolProfile };
+
+export const UNSAFE_RAW_OUTPUT_WARNING =
+  "WARNING: --unsafe-raw-output exposes unmasked local file content. Review stdout before sharing.\n";
 
 export function parseCliArguments(args: string[]): CliArguments {
   if (args.length === 0) {
@@ -47,7 +51,19 @@ export function parseCliArguments(args: string[]): CliArguments {
     return { mode: "help", exitCode: 0 };
   }
   if (args[0] !== "--mcp") {
-    return { mode: "parse", fileArg: args[0] };
+    const fileArg = args[0]!;
+    if (fileArg.startsWith("-")) {
+      throw new Error(`Unknown direct-mode option: ${fileArg}`);
+    }
+    let unsafeRawOutput = false;
+    for (const option of args.slice(1)) {
+      if (option === "--unsafe-raw-output") {
+        unsafeRawOutput = true;
+        continue;
+      }
+      throw new Error(`Unknown direct-mode option: ${option}`);
+    }
+    return { mode: "parse", fileArg, unsafeRawOutput };
   }
 
   const fileArg = args[1];
@@ -91,17 +107,49 @@ async function main(argv: string[]): Promise<void> {
   }
 
   const result = await parseFile(parsedArgs.fileArg);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (parsedArgs.unsafeRawOutput) {
+    process.stderr.write(UNSAFE_RAW_OUTPUT_WARNING);
+  }
+  const output = parsedArgs.unsafeRawOutput ? result : maskCliOutput(result);
+  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 }
 
 function printHelp(): void {
   process.stderr.write(`Usage:\n`);
-  process.stderr.write(`  a5sql-mcp <file>\n`);
+  process.stderr.write(`  a5sql-mcp <file> [--unsafe-raw-output]\n`);
   process.stderr.write(`  a5sql-mcp --mcp <file> [--tool-profile <profile>]\n\n`);
   process.stderr.write(
     `Parse a local .a5er or .sql file and print JSON, or serve it over MCP stdio.\n`,
   );
   process.stderr.write(`MCP tool profiles: all, core-read, schema-explore, draft-generation.\n`);
+  process.stderr.write(
+    `Direct JSON output is masked by default; --unsafe-raw-output explicitly disables masking.\n`,
+  );
+}
+
+export function maskCliOutput<T>(value: T): T {
+  return maskStructuredValue(value) as T;
+}
+
+function maskStructuredValue(value: unknown, key?: string): unknown {
+  if (typeof value === "string") {
+    if (key && hasSecretLikeKey(key)) {
+      return "***";
+    }
+    return maskSensitiveText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => maskStructuredValue(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([childKey, childValue]) => [
+        childKey,
+        maskStructuredValue(childValue, childKey),
+      ]),
+    );
+  }
+  return value;
 }
 
 function detectKind(filePath: string): CliResult["kind"] {

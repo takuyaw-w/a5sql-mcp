@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 
 import {
   detectA5sqlLocations,
-  listA5sqlConnections,
+  listA5sqlConnectionsWithMetadata,
   maskSensitiveText,
   parseA5sqlAssetWithMetadata,
   readA5sqlAssetWithMetadata,
@@ -291,9 +291,13 @@ export function createListA5sqlConnectionsHandler() {
       return jsonResult(
         withUntrustedPayloadContract({
           connections: [],
-          totalConnectionCount: 0,
+          knownConnectionCount: 0,
+          totalConnectionCount: null,
+          totalConnectionCountIsExact: false,
           returnedConnectionCount: 0,
           truncated: false,
+          visitedFileCount: 0,
+          cutoffReason: null,
           code: "roots_required",
           warnings: ["roots_required"],
           nextAction:
@@ -302,20 +306,22 @@ export function createListA5sqlConnectionsHandler() {
       );
     }
     const effectiveLimit = limit ?? 50;
-    const requestedLimit = effectiveLimit < 200 ? effectiveLimit + 1 : effectiveLimit;
-    const connections = await listA5sqlConnections({
+    const result = await listA5sqlConnectionsWithMetadata({
       roots,
-      limit: requestedLimit,
+      limit: effectiveLimit,
       revealNonSecret,
     });
-    const truncated = connections.length > effectiveLimit;
-    const publicConnections = connections.slice(0, effectiveLimit).map(toPublicConnectionCandidate);
+    const publicConnections = result.connections.map(toPublicConnectionCandidate);
     return jsonResult(
       withUntrustedPayloadContract({
         connections: publicConnections,
-        totalConnectionCount: publicConnections.length,
-        returnedConnectionCount: publicConnections.length,
-        truncated,
+        knownConnectionCount: result.knownConnectionCount,
+        totalConnectionCount: result.totalConnectionCount,
+        totalConnectionCountIsExact: result.totalConnectionCountIsExact,
+        returnedConnectionCount: result.returnedConnectionCount,
+        truncated: result.truncated,
+        visitedFileCount: result.visitedFileCount,
+        cutoffReason: result.cutoffReason,
         warnings:
           revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
         nextAction:

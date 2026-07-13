@@ -71,6 +71,9 @@ jobs:
       - name: Run release checks
         run: pnpm release:check
 
+      - name: Validate installed packages
+        run: pnpm published:check
+
       - name: Publish packages with npm token
         if: env.HAS_NPM_TOKEN == 'true'
         env:
