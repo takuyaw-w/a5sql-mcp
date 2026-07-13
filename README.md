@@ -483,6 +483,8 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 
 0.10.4 MCP Resource Gateway Pilot では、`a5sql://configured-file/summary` と `.a5er` 専用の `a5sql://configured-file/schema-summary` を固定 URI の read-only Resource として公開します。Resource は path-free、summary-only、秘密情報マスク済みであり、A5:SQL 由来 payload は `contentIsUntrusted` / `untrustedPayloadFields` で未信頼として分類します。明示 `roots` が必要な asset 操作は tool-only のまま維持します。
 
+0.10.5 の 0.10.x Dry Run / Draft Graduation Decision では、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` の5 tool を 1.0.0 前の卒業対象と判断します。ただし0.10.5では `experimental draft tool` marker を維持します。0.11.0で卒業条件、0.12.0で contract hardening、0.13.0で条件を満たした tool の marker removal を行います。卒業後も `outputKind: "draft"`、review 前提、DB 非接続、SQL 非実行、ファイルシステム非書き込み、未信頼 input 由来の安全 signal は維持します。
+
 安全な tool call metadata が必要な場合だけ `A5SQL_MCP_OBSERVABILITY=stderr` を指定できます。stderr へ出すのは tool 名、process-local HMAC による input hash、latency、output size、固定 error code だけです。入力値、本文、秘密情報、絶対 path、例外 message は出しません。stdout は常に JSON-RPC 専用です。
 
 0.9.6 では、実ファイル耐性を再確認するために `.a5er` の unknown / truncated / encoding mismatch fixture と SQL split / referenced table 抽出の quote / comment 処理を固定しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。

@@ -38,6 +38,16 @@ function extractResourceGuidance(text: string) {
   return text.slice(start, start + 2200);
 }
 
+function extractDraftGraduationGuidance(text: string) {
+  const start = text.indexOf("0.10.5");
+
+  if (start < 0) {
+    return "";
+  }
+
+  return text.slice(start, start + 2400);
+}
+
 function expectContainsAny(label: string, actual: string, expectedValues: string[]) {
   expect(
     expectedValues.some((expectedValue) => actual.includes(expectedValue)),
@@ -352,6 +362,42 @@ describe("public documentation redaction audit", () => {
       expect(guidance).toContain("DB");
       expect(guidance).toContain("SQL");
       expect(guidance).toContain("ファイル");
+    }
+  });
+
+  it("documents the 0.10.5 draft graduation decision", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+    const roadmap = await readFile(new URL("../../../ROADMAP.md", import.meta.url), "utf8");
+    const draftToolNames = [
+      "generate_sql_select",
+      "generate_mermaid_er_diagram",
+      "generate_model_files",
+      "generate_schema_markdown",
+      "generate_migration_plan",
+    ];
+
+    expect(roadmap).toContain("### [x] 0.10.5");
+    expect(roadmap).toContain("卒業予定、現在は未卒業");
+    expect(roadmap).toContain("共通 draft safety contract");
+
+    for (const { relativePath, text } of docs) {
+      const guidance = extractDraftGraduationGuidance(text);
+
+      expect(guidance, `${relativePath} should document 0.10.5`).toContain("0.10.5");
+      for (const toolName of draftToolNames) {
+        expect(guidance, `${relativePath} should classify ${toolName}`).toContain(toolName);
+      }
+      expect(guidance).toContain("1.0.0 前");
+      expect(guidance).toContain("experimental draft tool");
+      expect(guidance).toContain('outputKind: "draft"');
+      expect(guidance).toContain("0.11.0");
+      expect(guidance).toContain("0.12.0");
+      expect(guidance).toContain("0.13.0");
     }
   });
 

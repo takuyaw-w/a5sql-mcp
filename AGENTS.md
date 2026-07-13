@@ -73,6 +73,8 @@
 
 0.10.4 の MCP Resource Gateway Pilot では、`a5sql://configured-file/summary` と `.a5er` 専用の `a5sql://configured-file/schema-summary` を固定 URI の read-only Resource として公開する。Resource は summary-only とし、basename、absolute path、本文を含めない。A5:SQL 由来 payload は `contentIsUntrusted: true` と `untrustedPayloadFields` で未信頼として分類し、秘密情報は tool と同じ public masking boundary でマスクする。`search_a5sql_assets` / `read_a5sql_asset` / `parse_a5sql_asset` は明示 `roots` / `A5SQL_MCP_ROOTS` が必要なため tool-only とし、root/path を Resource URI に埋め込まない。`--tool-profile` は Resource filtering に使わず、DB 接続、SQL 実行、ファイル書き込みの non-goal を維持する。
 
+0.10.5 の 0.10.x Dry Run / Draft Graduation Decision では、`generate_sql_select`、`generate_mermaid_er_diagram`、`generate_model_files`、`generate_schema_markdown`、`generate_migration_plan` の5 tool を 1.0.0 前の卒業対象と判断する。ただし0.10.5では `experimental draft tool` marker を維持する。0.11.0で卒業条件、0.12.0で contract hardening、0.13.0で条件を満たした tool の marker removal を行う。卒業後も `outputKind: "draft"`、review 前提、DB 非接続、SQL 非実行、ファイルシステム非書き込み、未信頼 input 由来の安全 signal は維持する。
+
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 
 - A5:SQL の内部設定や履歴形式をより深く解釈した検索を追加する。
