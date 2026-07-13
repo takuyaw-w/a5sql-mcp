@@ -5,6 +5,7 @@ import type {
   ParsedA5erPosition,
   ParsedA5erRelationship,
   ParsedA5erTable,
+  ParsedA5erWarningDetail,
 } from "./types.js";
 
 type A5erSection = {
@@ -19,6 +20,7 @@ export type ParseA5erIniOptions = {
 export function parseA5erIni(text: string, options: ParseA5erIniOptions = {}): ParsedA5erDocument {
   const normalized = text.replace(/^\uFEFF/, "");
   const warnings: string[] = [];
+  const warningDetails: ParsedA5erWarningDetail[] = [];
   const sections = parseSections(normalized);
   const header = parseHeader(normalized);
   const recognized = isRecognizedA5erDocument(header, sections);
@@ -29,7 +31,12 @@ export function parseA5erIni(text: string, options: ParseA5erIniOptions = {}): P
     const headerEncoding = normalizeEncodingName(header.encoding);
     const fileEncoding = normalizeEncodingName(options.fileEncoding);
     if (headerEncoding !== fileEncoding) {
-      warnings.push(`a5er_encoding_mismatch:${header.encoding}:${options.fileEncoding}`);
+      warnings.push("a5er_encoding_mismatch");
+      warningDetails.push({
+        code: "a5er_encoding_mismatch",
+        declaredEncoding: header.encoding,
+        decodedEncoding: options.fileEncoding,
+      });
     }
   }
   const managerSection = sections.find((section) => equalsIgnoreCase(section.name, "Manager"));
@@ -40,12 +47,12 @@ export function parseA5erIni(text: string, options: ParseA5erIniOptions = {}): P
 
   const tables = sections
     .filter((section) => equalsAnyIgnoreCase(section.name, ["Entity", "View"]))
-    .map((section) => parseTable(section, warnings))
+    .map((section) => parseTable(section, warnings, warningDetails))
     .filter((table): table is ParsedA5erTable => table !== null);
 
   const relationships = sections
     .filter((section) => equalsAnyIgnoreCase(section.name, ["Relation", "Relationship"]))
-    .map((section) => parseRelationship(section, warnings))
+    .map((section) => parseRelationship(section, warnings, warningDetails))
     .filter((relationship): relationship is ParsedA5erRelationship => relationship !== null);
 
   return {
@@ -57,6 +64,7 @@ export function parseA5erIni(text: string, options: ParseA5erIniOptions = {}): P
     tables,
     relationships,
     warnings,
+    warningDetails,
   };
 }
 
@@ -125,12 +133,17 @@ function parseManager(section: A5erSection): Record<string, unknown> {
   return result;
 }
 
-function parseTable(section: A5erSection, warnings: string[]): ParsedA5erTable | null {
+function parseTable(
+  section: A5erSection,
+  warnings: string[],
+  warningDetails: ParsedA5erWarningDetail[],
+): ParsedA5erTable | null {
   const physicalName = first(section, "PName");
   const logicalName = first(section, "LName");
   const name = physicalName ?? logicalName;
   if (!name) {
-    warnings.push(`table_missing_name:${section.name}`);
+    warnings.push("table_missing_name");
+    warningDetails.push({ code: "table_missing_name", sectionName: section.name });
     return null;
   }
 
@@ -197,11 +210,16 @@ function parsePosition(value: string): ParsedA5erPosition | null {
 function parseRelationship(
   section: A5erSection,
   warnings: string[],
+  warningDetails: ParsedA5erWarningDetail[],
 ): ParsedA5erRelationship | null {
   const entity1 = first(section, "Entity1");
   const entity2 = first(section, "Entity2");
   if (!entity1 && !entity2) {
-    warnings.push(`relationship_missing_entities:${first(section, "PName") ?? "unnamed"}`);
+    warnings.push("relationship_missing_entities");
+    warningDetails.push({
+      code: "relationship_missing_entities",
+      relationshipName: first(section, "PName") ?? "unnamed",
+    });
     return null;
   }
   return {
@@ -252,10 +270,11 @@ function parseScalar(value: string): unknown {
     return "";
   }
   if (/^-?\d+$/.test(decoded)) {
-    return Number(decoded);
+    const parsed = Number(decoded);
+    return Number.isSafeInteger(parsed) ? parsed : decoded;
   }
   if (/^-?\d+\.\d+$/.test(decoded)) {
-    return Number(decoded);
+    return decoded;
   }
   return decoded;
 }
@@ -350,6 +369,7 @@ export type {
   ParsedA5erPosition,
   ParsedA5erRelationship,
   ParsedA5erTable,
+  ParsedA5erWarningDetail,
 } from "./types.js";
-export { parseSqlStatements } from "./sql.js";
-export type { ParsedSqlStatement } from "./sql.js";
+export { parseSqlDocument, parseSqlStatements } from "./sql.js";
+export type { ParsedSqlDocument, ParsedSqlStatement, ParseSqlDocumentOptions } from "./sql.js";

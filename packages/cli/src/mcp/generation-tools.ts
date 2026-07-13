@@ -19,6 +19,7 @@ import type {
   LiveSchemaTable,
 } from "./schema-compare/types.js";
 import type { A5erCliResult, JsonObject } from "./types.js";
+import { addWarning, type WarningDetail } from "./warnings.js";
 
 const DEFAULT_MODEL_TABLE_LIMIT = 20;
 const DEFAULT_JOIN_TABLE_LIMIT = 10;
@@ -56,6 +57,7 @@ export function generateSqlSelect(
   }
 
   const warnings: string[] = [];
+  const warningDetails: WarningDetail[] = [];
   const requestedRelatedTables = options.relatedTables ?? [];
   const hasRelatedFilter = requestedRelatedTables.length > 0;
   const relatedFilter = new Set<string>();
@@ -65,7 +67,7 @@ export function generateSqlSelect(
       relatedFilter.add(table.name);
       continue;
     }
-    warnings.push(`related_table_filter_not_found:${tableName}`);
+    addWarning(warnings, warningDetails, "related_table_filter_not_found", { tableName });
   }
   const allJoinCandidates = options.includeRelations
     ? (index.relationshipsByTable.get(baseTable.name) ?? []).filter((relationship) => {
@@ -80,9 +82,10 @@ export function generateSqlSelect(
   const maxRelatedTables = options.maxRelatedTables ?? DEFAULT_JOIN_TABLE_LIMIT;
   const joinCandidates = allJoinCandidates.slice(0, maxRelatedTables);
   if (allJoinCandidates.length > joinCandidates.length) {
-    warnings.push(
-      `related_table_output_truncated:${joinCandidates.length}/${allJoinCandidates.length}`,
-    );
+    addWarning(warnings, warningDetails, "related_table_output_truncated", {
+      returnedTableCount: joinCandidates.length,
+      totalTableCount: allJoinCandidates.length,
+    });
   }
 
   const aliases = new Map<string, string>([[baseTable.name, "t0"]]);
@@ -98,7 +101,7 @@ export function generateSqlSelect(
     }
     const relatedTable = relatedName ? index.tablesByName.get(relatedName) : undefined;
     if (!relatedTable) {
-      warnings.push(`related_table_not_found:${relatedName}`);
+      addWarning(warnings, warningDetails, "related_table_not_found", { tableName: relatedName });
       continue;
     }
     const alias = `t${aliasIndex}`;
@@ -124,7 +127,10 @@ export function generateSqlSelect(
     (columnName) => !validWhereColumns.includes(columnName),
   );
   for (const columnName of invalidWhereColumns) {
-    warnings.push(`where_column_not_found:${baseTable.name}.${columnName}`);
+    addWarning(warnings, warningDetails, "where_column_not_found", {
+      tableName: baseTable.name,
+      columnName,
+    });
   }
 
   const sqlLines = [
@@ -170,6 +176,7 @@ export function generateSqlSelect(
     parameters: validWhereColumns.map((columnName) => `:${columnName}`),
     sql: `${sqlLines.join("\n")};`,
     warnings,
+    warningDetails,
   });
 }
 
@@ -192,6 +199,7 @@ export function generateMigrationPlan(
   const index = buildA5erIndex(result.parsed);
   const liveIndex = buildLiveSchemaLookup(options.liveSchema);
   const warnings: string[] = [];
+  const warningDetails: WarningDetail[] = [];
   const requestedTables = options.tableNames ?? [];
   const requestedTableNames = new Set<string>();
   for (const tableName of requestedTables) {
@@ -200,7 +208,7 @@ export function generateMigrationPlan(
       requestedTableNames.add(table.name);
       continue;
     }
-    warnings.push(`table_filter_not_found:${tableName}`);
+    addWarning(warnings, warningDetails, "table_filter_not_found", { tableName });
   }
 
   const operations: MigrationOperation[] = [];
@@ -284,7 +292,10 @@ export function generateMigrationPlan(
           statements: renderMigrationStatements(style, "drop_column", table, undefined, liveColumn),
         });
       } else {
-        warnings.push(`extra_live_column_skipped:${table.name}.${liveColumn.name}`);
+        addWarning(warnings, warningDetails, "extra_live_column_skipped", {
+          tableName: table.name,
+          columnName: liveColumn.name,
+        });
       }
     }
   }
@@ -325,6 +336,7 @@ export function generateMigrationPlan(
     operations: limitedOperations,
     plan: renderMigrationPlan(style, limitedOperations),
     warnings,
+    warningDetails,
     nextAction:
       "migration plan は案です。実行前に DB 方言、既存データ、制約名、インデックスを確認してください。",
   });
@@ -345,6 +357,7 @@ export function generateSchemaMarkdown(
   }
   const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
+  const warningDetails: WarningDetail[] = [];
   const includeRelationships = options.includeRelationships ?? true;
   const includeViews = options.includeViews ?? true;
   const maxTables = options.maxTables ?? DEFAULT_SCHEMA_MARKDOWN_TABLE_LIMIT;
@@ -358,7 +371,7 @@ export function generateSchemaMarkdown(
       requestedTableNames.add(table.name);
       continue;
     }
-    warnings.push(`table_filter_not_found:${tableName}`);
+    addWarning(warnings, warningDetails, "table_filter_not_found", { tableName });
   }
 
   const matchingTables = result.parsed.tables.filter((table) => {
@@ -372,7 +385,10 @@ export function generateSchemaMarkdown(
   });
   const tables = matchingTables.slice(0, maxTables);
   if (matchingTables.length > tables.length) {
-    warnings.push(`table_output_truncated:${tables.length}/${matchingTables.length}`);
+    addWarning(warnings, warningDetails, "table_output_truncated", {
+      returnedTableCount: tables.length,
+      totalTableCount: matchingTables.length,
+    });
   }
   const tableNameSet = new Set(tables.map((table) => table.name));
   const lines = [
@@ -405,9 +421,11 @@ export function generateSchemaMarkdown(
       lines.push(
         `| ... | ... | ... | ... | ... | ${table.columns.length - columns.length} columns omitted |`,
       );
-      warnings.push(
-        `column_output_truncated:${table.name}:${columns.length}/${table.columns.length}`,
-      );
+      addWarning(warnings, warningDetails, "column_output_truncated", {
+        tableName: table.name,
+        returnedColumnCount: columns.length,
+        totalColumnCount: table.columns.length,
+      });
     }
     lines.push("");
   }
@@ -440,10 +458,10 @@ export function generateSchemaMarkdown(
     maxTables,
     maxColumnsPerTable,
     truncated:
-      matchingTables.length > tables.length ||
-      warnings.some((warning) => warning.startsWith("column_output_truncated:")),
+      matchingTables.length > tables.length || warnings.includes("column_output_truncated"),
     markdown: lines.join("\n"),
     warnings,
+    warningDetails,
   });
 }
 
@@ -460,6 +478,7 @@ export function generateModelFiles(
   }
   const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
+  const warningDetails: WarningDetail[] = [];
   const requestedTables = options.tableNames ?? [];
   const requestedTableNames = new Set<string>();
   const maxTables = options.maxTables ?? DEFAULT_MODEL_TABLE_LIMIT;
@@ -470,7 +489,7 @@ export function generateModelFiles(
       requestedTableNames.add(table.name);
       continue;
     }
-    warnings.push(`table_filter_not_found:${tableName}`);
+    addWarning(warnings, warningDetails, "table_filter_not_found", { tableName });
   }
 
   const matchingTables = result.parsed.tables.filter((table) => {
@@ -484,7 +503,10 @@ export function generateModelFiles(
   });
   const tables = matchingTables.slice(0, maxTables);
   if (matchingTables.length > tables.length) {
-    warnings.push(`table_output_truncated:${tables.length}/${matchingTables.length}`);
+    addWarning(warnings, warningDetails, "table_output_truncated", {
+      returnedTableCount: tables.length,
+      totalTableCount: matchingTables.length,
+    });
   }
 
   const files =
@@ -502,6 +524,7 @@ export function generateModelFiles(
     truncated: matchingTables.length > tables.length,
     files,
     warnings,
+    warningDetails,
   });
 }
 

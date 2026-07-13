@@ -264,6 +264,26 @@ describe("public documentation redaction audit", () => {
     }
   });
 
+  it("documents the 0.10.2 contract integrity and safe observability boundary", async () => {
+    const docs = await Promise.all(
+      PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({
+        relativePath,
+        text: await readFile(new URL(relativePath, import.meta.url), "utf8"),
+      })),
+    );
+
+    for (const { relativePath, text } of docs) {
+      expect(text, `${relativePath} should document 0.10.2`).toContain("0.10.2");
+      expect(text, `${relativePath} should document warningDetails`).toContain("warningDetails");
+      expect(text, `${relativePath} should document bounded lookup`).toContain("maxFiles");
+      expect(text, `${relativePath} should document observability opt-in`).toContain(
+        "A5SQL_MCP_OBSERVABILITY=stderr",
+      );
+      expect(text, `${relativePath} should preserve stdout for JSON-RPC`).toContain("JSON-RPC");
+      expect(text, `${relativePath} should document input hashing`).toContain("HMAC");
+    }
+  });
+
   it("documents the 0.9.13 docs and onboarding freeze boundaries", async () => {
     const docs = await Promise.all(
       PUBLIC_GUIDANCE_FILES.map(async (relativePath) => ({

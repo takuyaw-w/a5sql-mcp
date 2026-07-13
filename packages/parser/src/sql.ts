@@ -5,18 +5,49 @@ export type ParsedSqlStatement = {
   referencedTables: string[];
 };
 
+export type ParseSqlDocumentOptions = {
+  maxStatements?: number;
+  sourceTruncated?: boolean;
+};
+
+export type ParsedSqlDocument = {
+  statements: ParsedSqlStatement[];
+  totalStatementCount: number;
+  returnedStatementCount: number;
+  statementsTruncated: boolean;
+  trailingStatementMayBeIncomplete: boolean;
+};
+
 export function parseSqlStatements(text: string): ParsedSqlStatement[] {
-  return splitSqlStatements(text)
-    .slice(0, 100)
-    .map((statement, index) => ({
-      index,
-      operation: detectOperation(statement),
-      preview: statement.replace(/\s+/g, " ").trim().slice(0, 240),
-      referencedTables: detectReferencedTables(statement),
-    }));
+  return parseSqlDocument(text).statements;
 }
 
-function splitSqlStatements(text: string): string[] {
+export function parseSqlDocument(
+  text: string,
+  options: ParseSqlDocumentOptions = {},
+): ParsedSqlDocument {
+  const split = splitSqlStatements(text);
+  const maxStatements = Math.max(0, options.maxStatements ?? split.statements.length);
+  const statements = split.statements.slice(0, maxStatements).map((statement, index) => ({
+    index,
+    operation: detectOperation(statement),
+    preview: statement.replace(/\s+/g, " ").trim().slice(0, 240),
+    referencedTables: detectReferencedTables(statement),
+  }));
+  return {
+    statements,
+    totalStatementCount: split.statements.length,
+    returnedStatementCount: statements.length,
+    statementsTruncated: split.statements.length > statements.length,
+    trailingStatementMayBeIncomplete:
+      options.sourceTruncated === true && split.hasTrailingStatement,
+  };
+}
+
+function splitSqlStatements(text: string): {
+  statements: string[];
+  hasTrailingStatement: boolean;
+} {
   const statements: string[] = [];
   let current = "";
   let quote: "'" | '"' | "`" | null = null;
@@ -110,10 +141,11 @@ function splitSqlStatements(text: string): string[] {
 
     current += char;
   }
-  if (current.trim()) {
+  const hasTrailingStatement = current.trim().length > 0;
+  if (hasTrailingStatement) {
     statements.push(current.trim());
   }
-  return statements;
+  return { statements, hasTrailingStatement };
 }
 
 function isBackslashEscaped(text: string, quoteIndex: number): boolean {

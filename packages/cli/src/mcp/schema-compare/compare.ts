@@ -12,6 +12,7 @@ import type {
   SchemaCompareIssue,
 } from "./types.js";
 import { withUntrustedPayloadContract } from "../output-contract.js";
+import type { WarningDetail } from "../warnings.js";
 
 const DEFAULT_SCHEMA_COMPARE_ISSUE_LIMIT = 200;
 const MAX_SCHEMA_COMPARE_WARNINGS = 100;
@@ -27,8 +28,9 @@ type IssueCollector = {
 };
 
 type WarningCollector = {
-  add: (warning: string) => void;
+  add: (code: string, detail?: Record<string, unknown>) => void;
   values: string[];
+  details: WarningDetail[];
 };
 
 type A5erLookupIndex = {
@@ -77,7 +79,7 @@ export function compareA5erWithLiveSchema(
       requestedTableNames.add(table.name);
       continue;
     }
-    warnings.add(`table_filter_not_found:${tableName}`);
+    warnings.add("table_filter_not_found", { tableName });
   }
 
   const a5erTables = result.parsed.tables.filter((table) => {
@@ -147,6 +149,7 @@ export function compareA5erWithLiveSchema(
     },
     summary: issueCollector.summary,
     warnings: warnings.values,
+    warningDetails: warnings.details,
     issues: issueCollector.issues,
     nextAction:
       "live schema は既存の DB MCP などで取得し、この tool にはスナップショット JSON として渡してください。a5sql-mcp は DB へ接続しません。",
@@ -190,7 +193,10 @@ function buildLiveSchemaIndex(
     for (const column of table.columns) {
       const columnKey = normalizeLookupName(column.name);
       if (columnsByName.has(columnKey)) {
-        warnings.add(`live_schema_duplicate_column:${key}.${column.name}`);
+        warnings.add("live_schema_duplicate_column", {
+          tableName: key,
+          columnName: column.name,
+        });
         continue;
       }
       columnsByName.set(columnKey, column);
@@ -209,7 +215,7 @@ function buildLiveSchemaIndex(
     for (const lookupName of [table.name, key]) {
       const lookupKey = normalizeLookupName(lookupName);
       if (tablesByLookupName.has(lookupKey)) {
-        warnings.add(`live_schema_duplicate_table:${lookupName}`);
+        warnings.add("live_schema_duplicate_table", { tableName: lookupName });
         continue;
       }
       tablesByLookupName.set(lookupKey, indexedTable);
@@ -405,23 +411,29 @@ function createIssueCollector(maxIssues: number): IssueCollector {
 
 function createWarningCollector(maxWarnings: number): WarningCollector {
   const values: string[] = [];
+  const details: WarningDetail[] = [];
   let skipped = 0;
 
   return {
-    add(warning) {
+    add(code, detail = {}) {
       if (values.length < maxWarnings) {
-        values.push(warning);
+        values.push(code);
+        details.push({ code, ...detail });
         return;
       }
       skipped += 1;
-      const truncatedWarning = `warnings_truncated:${skipped}`;
+      const truncatedWarning = "warnings_truncated";
+      const truncatedDetail = { code: truncatedWarning, skippedWarningCount: skipped };
       if (values.length === maxWarnings) {
         values.push(truncatedWarning);
+        details.push(truncatedDetail);
         return;
       }
       values[values.length - 1] = truncatedWarning;
+      details[details.length - 1] = truncatedDetail;
     },
     values,
+    details,
   };
 }
 

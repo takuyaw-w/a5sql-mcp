@@ -456,6 +456,10 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 
 0.10.1 Scoped Tool Surface / Client Profile では、既定の `--mcp <file>` 起動を `all` として維持しつつ、`--tool-profile core-read`、`--tool-profile schema-explore`、`--tool-profile draft-generation` で `tools/list` の表示を用途別に絞れるようにします。profile は tool 表示の調整であり、権限拡張や安全境界の代替ではありません。
 
+0.10.2 Contract Integrity, Structured Errors and Safe Observability では、`warnings`、`message`、`code`、`nextAction` を固定 guidance に限定し、A5:SQL / live schema / tool input 由来の可変値を未信頼の `warningDetails` に分離します。assetId の探索は `maxFiles`、`visitedFileCount`、`lookupTruncated`、`cutoffReason` を返し、探索打ち切りと確定した未発見を区別します。truncated `.a5er` は完全 schema として解析せず、SQL の部分解析は statement 総数・返却数・truncation・末尾不完全性を明示します。
+
+安全な tool call metadata が必要な場合だけ `A5SQL_MCP_OBSERVABILITY=stderr` を指定できます。stderr へ出すのは tool 名、process-local HMAC による input hash、latency、output size、固定 error code だけです。入力値、本文、秘密情報、絶対 path、例外 message は出しません。stdout は常に JSON-RPC 専用です。
+
 0.9.6 では、実ファイル耐性を再確認するために `.a5er` の unknown / truncated / encoding mismatch fixture と SQL split / referenced table 抽出の quote / comment 処理を固定しています。`.a5er` の解析結果には `parseStatus` が含まれます。`ok` は A5:ER として認識できた状態、`unrecognized` は A5:ER らしいヘッダーやセクションを検出できなかった状態です。
 
 `unrecognized` の場合は、空の正常スキーマとして扱わず、まず `read_a5sql_file` または `read_a5sql_asset` で先頭行、拡張子、文字コードを確認してください。A5:ER では `View`、`Index`、`Position`、`PageInfo`、`DomainInfo`、`CommonField` など、存在する optional 情報だけを構造化します。未知セクションは無視しますが、table や relationship として成立しない section は warning で返します。
@@ -463,10 +467,10 @@ A5:SQL 由来の payload を含む代表的な tool 出力には、trusted metad
 主な warning は次のとおりです。
 
 - `a5er_structure_not_recognized`: A5:ER らしい構造を検出できません。対象ファイル、文字コード、拡張子を確認してください。
-- `a5er_encoding_mismatch:<declared>:<decoded>`: A5:ER ヘッダーの `ENCODING` と実際に読み取った文字コードが一致していません。文字化け、誤ったファイル指定、ヘッダーと保存形式の不一致の可能性があります。
+- `a5er_encoding_mismatch`: A5:ER ヘッダーの `ENCODING` と実際に読み取った文字コードが一致していません。宣言値と decode 結果は未信頼の `warningDetails` に入ります。
 - `manager_section_not_found`: A5:ER として認識できましたが `[Manager]` section がありません。古い形式、切り出し済み fixture、または不完全なファイルの可能性があります。
-- `table_missing_name:<section>`: `Entity` / `View` section に物理名と論理名がありません。該当 section は table 一覧に含めません。
-- `relationship_missing_entities:<name>`: relationship section に接続元/接続先 entity がありません。該当 relationship は一覧に含めません。
+- `table_missing_name`: `Entity` / `View` section に物理名と論理名がありません。section 名は `warningDetails` に入り、該当 section は table 一覧に含めません。
+- `relationship_missing_entities`: relationship section に接続元/接続先 entity がありません。relationship 名は `warningDetails` に入り、該当 relationship は一覧に含めません。
 
 SQL asset の解析は heuristic です。0.6.0 では single quote、double quote、backtick、line comment、block comment、PostgreSQL dollar quote 内の semicolon を statement delimiter として扱わないようにしています。ただし SQL 方言ごとの完全な構文解析ではないため、実行前レビュー用の要約として扱ってください。
 

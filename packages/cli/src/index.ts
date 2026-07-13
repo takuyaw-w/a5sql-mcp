@@ -4,7 +4,7 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseA5erIni, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
+import { parseA5erIni, parseSqlDocument } from "@takuyaw-w/a5sql-mcp-parser";
 
 import {
   DEFAULT_TOOL_PROFILE,
@@ -150,7 +150,7 @@ export async function parseFile(
     kind === "a5er"
       ? parseA5erIni(decoded.text, { fileEncoding: decoded.encoding })
       : kind === "sql"
-        ? { statements: parseSqlStatements(decoded.text) }
+        ? parseSqlDocument(decoded.text)
         : { text: decoded.text };
 
   return {

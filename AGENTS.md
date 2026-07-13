@@ -49,7 +49,7 @@
 
 大きなファイルでは全量を一度に返さず、`truncated`、`hasMore`、総件数、返却件数を見て段階的に読む。起動時に指定した単一ファイルも初期読み取り上限を持ち、上限超過時は全量 parse せず `file_too_large` として返す。
 
-`.a5er` の解析結果では `parseStatus` を必ず確認する。`unrecognized` の場合は、空の正常スキーマとして扱わず、`read_a5sql_file` で先頭行・文字コード・ファイル形式を確認する。`a5er_structure_not_recognized` は A5:ER らしい構造が見つからないことを示し、`a5er_encoding_mismatch:<declared>:<decoded>` はヘッダー上の文字コードと実デコード結果の不一致を示す。
+`.a5er` の解析結果では `parseStatus` を必ず確認する。`unrecognized` の場合は、空の正常スキーマとして扱わず、`read_a5sql_file` で先頭行・文字コード・ファイル形式を確認する。`a5er_structure_not_recognized` は A5:ER らしい構造が見つからないことを示し、`a5er_encoding_mismatch` の宣言値と実デコード結果は未信頼の `warningDetails` で確認する。
 
 0.9.6 の parser robustness では、壊れたファイルや prompt injection 風 payload を含むファイルでも、`warnings`、`message`、`code`、`nextAction` に A5:SQL 由来の文字列を混ぜないことを確認する。
 
@@ -66,6 +66,8 @@
 0.10.0 の Architecture Pattern Classification and Tool Description Audit では、この MCP server を Resource Gateway / Domain-Specific Adapter として扱う。A5:SQL / A5:ER のローカル資産を `roots` / `A5SQL_MCP_ROOTS`、`assetId`、範囲読み取り、limit、paging で段階的に読み、A5:SQL 由来の本文、コメント、識別子、SQL、draft は untrusted content として扱う。God Tool、unsanitized resource content、同期的な長時間処理、曖昧な tool description を anti-pattern として監査し、`tools/list` の tool description で使い分け、返す内容、read-only / draft 境界を判断しやすくする。DB には接続しません。SQL を実行しません。ファイルシステムには書き込みません。資格情報の復号・表示は行わない。
 
 0.10.1 の Scoped Tool Surface / Client Profile では、`--tool-profile` で `all`、`core-read`、`schema-explore`、`draft-generation` を選べるようにする。未指定時は `all` と同じ 1.0.0 互換の tool 表示を維持する。profile は tool 表示を絞るだけであり、権限機構や安全境界の代替ではない。`roots` / `A5SQL_MCP_ROOTS`、秘密情報マスク、untrusted content、draft disclosure、DB 非接続、SQL 非実行、ファイル非書き込みの contract は変えない。
+
+0.10.2 の Contract Integrity, Structured Errors and Safe Observability では、trusted guidance を固定 code に限定し、可変値を未信頼の `warningDetails` に分離する。asset lookup の `maxFiles` / visited count / cutoff、source byte metadata、truncated `.a5er` の fail-closed、SQL statement count、lossless scalar を contract として扱う。`A5SQL_MCP_OBSERVABILITY=stderr` は明示 opt-in であり、tool 名、process-local HMAC input hash、latency、output size、固定 error code 以外を log に出さない。stdout は JSON-RPC 専用とする。
 
 今後の拡張候補は次のとおりです。実装済み機能として扱わないでください。
 

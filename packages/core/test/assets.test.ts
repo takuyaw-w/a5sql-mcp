@@ -5,7 +5,12 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { readA5sqlAsset, searchA5sqlAssets, searchA5sqlAssetsWithMetadata } from "../src/assets.js";
+import {
+  readA5sqlAsset,
+  readA5sqlAssetWithMetadata,
+  searchA5sqlAssets,
+  searchA5sqlAssetsWithMetadata,
+} from "../src/assets.js";
 
 describe("A5:SQL asset search", () => {
   it("finds sql assets and masks snippets/read contents", async () => {
@@ -249,6 +254,26 @@ describe("A5:SQL asset search", () => {
       cutoffReason: "max_files_reached",
     });
     expect(result.assets).toHaveLength(1);
+  });
+
+  it("bounds asset ID lookup and distinguishes cutoff from not found", async () => {
+    const root = await makeTempDir();
+    await writeFile(path.join(root, "first.sql"), "select 1;", "utf8");
+    await writeFile(path.join(root, "second.sql"), "select 2;", "utf8");
+
+    const result = await readA5sqlAssetWithMetadata({
+      roots: [root],
+      assetId: "000000000000000000000000",
+      maxFiles: 1,
+    });
+
+    expect(result).toEqual({
+      result: null,
+      visitedFileCount: 1,
+      lookupTruncated: true,
+      cutoffReason: "max_files_reached",
+      maxFiles: 1,
+    });
   });
 });
 

@@ -14,6 +14,21 @@ export function jsonResult<T extends JsonObject>(output: T) {
   };
 }
 
+export function structuredErrorResult<
+  T extends JsonObject & {
+    code: string;
+    message: string;
+    nextAction: string;
+    retryable?: boolean;
+    warnings?: string[];
+  },
+>(output: T) {
+  return jsonResult({
+    ...output,
+    warnings: output.warnings ?? [output.code],
+  });
+}
+
 export type A5erToolOptions = {
   getParsedFile: ParsedFileLoader;
   notA5er: (parsed: CliResult) => JsonObject;

@@ -143,6 +143,7 @@ async function main() {
       ].join("\n"),
       "utf8",
     );
+    await writeFile(path.join(adversarialRoot, "queries", "decoy.sql"), "select 1;\n", "utf8");
 
     await assertPublishedPackageClientMatrix(client, {
       adversarialRoot,
@@ -344,6 +345,34 @@ async function assertPublishedPackageClientMatrix(
     ["summary", "statements"],
   );
   assertNoRawSecrets("parse_a5sql_asset", parseOutput, rawSecrets);
+
+  const connectionsOutput = await callToolStructured(client, "list_a5sql_connections", {
+    roots: [adversarialRoot],
+  });
+  assertObjectIncludes("list_a5sql_connections", connectionsOutput, {
+    contentIsUntrusted: true,
+  });
+  assertArrayIncludes(
+    "list_a5sql_connections untrustedPayloadFields",
+    connectionsOutput.untrustedPayloadFields,
+    ["connections"],
+  );
+  assertNoRawSecrets("list_a5sql_connections", connectionsOutput, rawSecrets);
+
+  const cutoffOutput = await callToolStructured(client, "read_a5sql_asset", {
+    roots: [adversarialRoot],
+    assetId: "published-check-missing-asset",
+    maxFiles: 1,
+  });
+  assertObjectIncludes("read_a5sql_asset lookup cutoff", cutoffOutput, {
+    found: false,
+    code: "asset_lookup_truncated",
+    retryable: true,
+    visitedFileCount: 1,
+    lookupTruncated: true,
+    cutoffReason: "max_files_reached",
+    maxFiles: 1,
+  });
 
   const selectOutput = await callToolStructured(client, "generate_sql_select", {
     tableName: "users",

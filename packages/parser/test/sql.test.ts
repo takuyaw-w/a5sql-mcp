@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseSqlStatements } from "../src/index.js";
+import { parseSqlDocument, parseSqlStatements } from "../src/index.js";
 
 describe("parseSqlStatements", () => {
   it("extracts operation and referenced tables", () => {
@@ -115,5 +115,41 @@ describe("parseSqlStatements", () => {
     expect(statements).toHaveLength(1);
     expect(statements[0]?.operation).toBe("select");
     expect(statements[0]?.preview.length).toBeLessThanOrEqual(240);
+  });
+
+  it("does not impose a hidden 100 statement limit", () => {
+    const statements = parseSqlStatements(
+      Array.from({ length: 101 }, (_, index) => `select ${index} from table_${index};`).join("\n"),
+    );
+
+    expect(statements).toHaveLength(101);
+    expect(statements[100]?.index).toBe(100);
+  });
+
+  it("reports total and returned statement counts independently", () => {
+    const parsed = parseSqlDocument(
+      Array.from({ length: 1001 }, (_, index) => `select ${index};`).join("\n"),
+      { maxStatements: 1000 },
+    );
+
+    expect(parsed.totalStatementCount).toBe(1001);
+    expect(parsed.returnedStatementCount).toBe(1000);
+    expect(parsed.statements).toHaveLength(1000);
+    expect(parsed.statementsTruncated).toBe(true);
+    expect(parsed.trailingStatementMayBeIncomplete).toBe(false);
+  });
+
+  it("marks a trailing fragment as potentially incomplete only for truncated sources", () => {
+    const truncated = parseSqlDocument("select * from users", {
+      maxStatements: 10,
+      sourceTruncated: true,
+    });
+    const completeChunk = parseSqlDocument("select * from users;", {
+      maxStatements: 10,
+      sourceTruncated: true,
+    });
+
+    expect(truncated.trailingStatementMayBeIncomplete).toBe(true);
+    expect(completeChunk.trailingStatementMayBeIncomplete).toBe(false);
   });
 });

@@ -2,13 +2,19 @@ export {
   searchA5sqlAssets,
   searchA5sqlAssetsWithMetadata,
   readA5sqlAsset,
+  readA5sqlAssetWithMetadata,
   classifyAsset,
 } from "./assets.js";
 export { listA5sqlConnections, extractConnectionCandidate } from "./connections.js";
 export { detectA5sqlLocations } from "./locations.js";
 export { maskSensitiveText, maskValue } from "./mask.js";
-export { parseA5sqlAsset } from "./parse.js";
-export { parseA5erIni, parseComplexValue, parseSqlStatements } from "@takuyaw-w/a5sql-mcp-parser";
+export { parseA5sqlAsset, parseA5sqlAssetWithMetadata } from "./parse.js";
+export {
+  parseA5erIni,
+  parseComplexValue,
+  parseSqlDocument,
+  parseSqlStatements,
+} from "@takuyaw-w/a5sql-mcp-parser";
 export type {
   A5sqlAssetKind,
   AssetRecord,
@@ -17,8 +23,11 @@ export type {
   ListConnectionsOptions,
   LocationCandidate,
   ParseAssetOptions,
+  ParseAssetLookupResult,
   ParsedAssetResult,
   ReadAssetOptions,
+  ReadAssetLookupCutoffReason,
+  ReadAssetLookupResult,
   ReadAssetResult,
   SearchAssetsOptions,
   SearchAssetsCutoffReason,
@@ -31,5 +40,8 @@ export type {
   ParsedA5erPosition,
   ParsedA5erRelationship,
   ParsedA5erTable,
+  ParsedA5erWarningDetail,
+  ParsedSqlDocument,
   ParsedSqlStatement,
+  ParseSqlDocumentOptions,
 } from "@takuyaw-w/a5sql-mcp-parser";

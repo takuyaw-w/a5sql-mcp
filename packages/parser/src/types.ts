@@ -7,6 +7,15 @@ export type ParsedA5erDocument = {
   tables: ParsedA5erTable[];
   relationships: ParsedA5erRelationship[];
   warnings: string[];
+  warningDetails: ParsedA5erWarningDetail[];
+};
+
+export type ParsedA5erWarningDetail = {
+  code: string;
+  sectionName?: string;
+  relationshipName?: string;
+  declaredEncoding?: string;
+  decodedEncoding?: string;
 };
 
 export type ParsedA5erTable = {

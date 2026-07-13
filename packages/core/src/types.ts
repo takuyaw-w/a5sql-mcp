@@ -2,6 +2,7 @@ import type {
   ParsedA5erDocument,
   ParsedA5erRelationship,
   ParsedA5erTable,
+  ParsedA5erWarningDetail,
   ParsedSqlStatement,
 } from "@takuyaw-w/a5sql-mcp-parser";
 
@@ -62,6 +63,7 @@ export type ReadAssetOptions = {
   assetId?: string;
   path?: string;
   maxBytes?: number;
+  maxFiles?: number;
 };
 
 export type ReadAssetResult = {
@@ -70,12 +72,23 @@ export type ReadAssetResult = {
   encoding: string;
   truncated: boolean;
   bytesRead: number;
+  sourceSizeBytes: number;
   warnings: string[];
+};
+
+export type ReadAssetLookupCutoffReason = "max_files_reached";
+
+export type ReadAssetLookupResult = {
+  result: ReadAssetResult | null;
+  visitedFileCount: number;
+  lookupTruncated: boolean;
+  cutoffReason: ReadAssetLookupCutoffReason | null;
+  maxFiles: number;
 };
 
 export type ParsedAssetResult = {
   asset: AssetRecord;
-  parser: "a5er-ini-v19" | "sql-heuristic" | "text-summary" | "unsupported";
+  parser: "a5er-ini-v19" | "sql-heuristic" | "text-summary" | "unsupported" | "not-attempted";
   summary: string;
   parseStatus?: ParsedA5erDocument["parseStatus"];
   encoding?: string;
@@ -84,13 +97,35 @@ export type ParsedAssetResult = {
   tables?: ParsedA5erTable[];
   relationships?: ParsedA5erRelationship[];
   statements?: ParsedSqlStatement[];
+  totalStatementCount?: number;
+  returnedStatementCount?: number;
+  statementsTruncated?: boolean;
+  trailingStatementMayBeIncomplete?: boolean;
+  sourceSizeBytes: number;
+  bytesRead: number;
+  sourceTruncated: boolean;
+  visitedFileCount: number;
+  lookupTruncated: boolean;
+  cutoffReason: ReadAssetLookupCutoffReason | null;
+  maxFiles: number;
   warnings: string[];
+  warningDetails: ParsedA5erWarningDetail[];
+};
+
+export type ParseAssetLookupResult = {
+  parsed: ParsedAssetResult | null;
+  visitedFileCount: number;
+  lookupTruncated: boolean;
+  cutoffReason: ReadAssetLookupCutoffReason | null;
+  maxFiles: number;
 };
 
 export type ParseAssetOptions = {
   roots?: string[];
   assetId: string;
   maxBytes?: number;
+  maxFiles?: number;
+  maxStatements?: number;
 };
 
 export type ConnectionField = {

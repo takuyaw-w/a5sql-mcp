@@ -15,6 +15,7 @@ import {
 } from "./a5er-output-utils.js";
 import { limitItems, slicePage, withUntrustedContentSignal } from "./output-utils.js";
 import type { A5erCliResult, JsonObject } from "./types.js";
+import { addWarning, type WarningDetail } from "./warnings.js";
 export { compareA5erWithLiveSchema } from "./schema-compare/compare.js";
 export {
   generateMigrationPlan,
@@ -257,6 +258,7 @@ export function findA5sqlColumns(
   }
   const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
+  const warningDetails: WarningDetail[] = [];
   const requestedTables = options.tableNames ?? [];
   const requestedTableNames = new Set<string>();
   for (const tableName of requestedTables) {
@@ -265,7 +267,7 @@ export function findA5sqlColumns(
       requestedTableNames.add(table.name);
       continue;
     }
-    warnings.push(`table_filter_not_found:${tableName}`);
+    addWarning(warnings, warningDetails, "table_filter_not_found", { tableName });
   }
 
   const query = options.query?.trim();
@@ -324,6 +326,7 @@ export function findA5sqlColumns(
       matchedBy,
     })),
     warnings,
+    warningDetails,
   });
 }
 
@@ -381,6 +384,7 @@ export function generateMermaidErDiagram(
   }
   const index = buildA5erIndex(result.parsed);
   const warnings: string[] = [];
+  const warningDetails: WarningDetail[] = [];
   const includeViews = options.includeViews ?? true;
   const includeColumns = options.includeColumns ?? true;
   const maxTables = options.maxTables ?? DEFAULT_MERMAID_TABLE_LIMIT;
@@ -393,7 +397,7 @@ export function generateMermaidErDiagram(
       requestedTableNames.add(table.name);
       continue;
     }
-    warnings.push(`table_filter_not_found:${tableName}`);
+    addWarning(warnings, warningDetails, "table_filter_not_found", { tableName });
   }
 
   const matchingTables = result.parsed.tables.filter((table) => {
@@ -407,7 +411,10 @@ export function generateMermaidErDiagram(
   });
   const filteredTables = matchingTables.slice(0, maxTables);
   if (matchingTables.length > filteredTables.length) {
-    warnings.push(`table_output_truncated:${filteredTables.length}/${matchingTables.length}`);
+    addWarning(warnings, warningDetails, "table_output_truncated", {
+      returnedTableCount: filteredTables.length,
+      totalTableCount: matchingTables.length,
+    });
   }
   const tableNameSet = new Set(filteredTables.map((table) => table.name));
   const entityNames = buildMermaidEntityNameMap(filteredTables);
@@ -415,7 +422,9 @@ export function generateMermaidErDiagram(
 
   for (const relationship of result.parsed.relationships) {
     if (!relationship.entity1 || !relationship.entity2) {
-      warnings.push(`relationship_missing_entity:${relationship.name ?? "unnamed"}`);
+      addWarning(warnings, warningDetails, "relationship_missing_entity", {
+        relationshipName: relationship.name ?? null,
+      });
       continue;
     }
     if (!tableNameSet.has(relationship.entity1) || !tableNameSet.has(relationship.entity2)) {
@@ -461,6 +470,7 @@ export function generateMermaidErDiagram(
     truncated: matchingTables.length > filteredTables.length,
     mermaid: lines.join("\n"),
     warnings,
+    warningDetails,
   });
 }
 
@@ -607,6 +617,7 @@ export function formatFullParsedFile(
     maxColumnsPerTable,
     truncated,
     warnings: result.parsed.warnings,
+    warningDetails: result.parsed.warningDetails,
     tables: limitedTables,
     relationships: limitedRelationships,
     nextAction:
@@ -639,6 +650,7 @@ export function summarizeParsedFile(
       relationshipCount: result.parsed.relationships.length,
       warningCount: result.parsed.warnings.length,
       warnings: result.parsed.warnings,
+      warningDetails: result.parsed.warningDetails,
       summaryLimit: limit,
       tables: tableSummaries,
       relationships: relationshipSummaries,
@@ -658,16 +670,29 @@ export function summarizeParsedFile(
     "statements" in result.parsed &&
     Array.isArray(result.parsed.statements)
   ) {
-    const statements = maskParsedValue(result.parsed.statements.slice(0, limit)) as unknown[];
+    const sql = result.parsed as {
+      statements: unknown[];
+      totalStatementCount?: number;
+      returnedStatementCount?: number;
+      statementsTruncated?: boolean;
+      trailingStatementMayBeIncomplete?: boolean;
+    };
+    const statements = maskParsedValue(sql.statements.slice(0, limit)) as unknown[];
     return withUntrustedContentSignal({
       filePath: result.filePath,
       kind: result.kind,
       mode: "summary",
       fileEncoding: result.encoding,
-      statementCount: result.parsed.statements.length,
+      statementCount: sql.totalStatementCount ?? sql.statements.length,
+      returnedStatementCount: statements.length,
+      parserReturnedStatementCount: sql.returnedStatementCount ?? sql.statements.length,
+      parserStatementsTruncated: sql.statementsTruncated ?? false,
+      trailingStatementMayBeIncomplete: sql.trailingStatementMayBeIncomplete ?? false,
       summaryLimit: limit,
       statements,
-      truncated: result.parsed.statements.length > statements.length,
+      truncated:
+        (sql.totalStatementCount ?? sql.statements.length) > statements.length ||
+        Boolean(sql.statementsTruncated),
       nextAction: "全量が必要な場合は mode=full を指定してください。",
     });
   }

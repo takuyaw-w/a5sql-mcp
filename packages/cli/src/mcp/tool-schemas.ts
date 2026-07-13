@@ -109,6 +109,13 @@ export const readA5sqlAssetInputSchema = {
     .max(2_000_000)
     .optional()
     .describe("asset 読み取りの最大 byte 数。省略時は 128KB。"),
+  maxFiles: z
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .optional()
+    .describe("assetId 解決時に探索するファイル数の上限。省略時は 5000。"),
   maxChars: z
     .number()
     .int()
@@ -202,6 +209,13 @@ export const parseA5sqlAssetInputSchema = {
     .max(2_000_000)
     .optional()
     .describe("asset 読み取りの最大 byte 数。省略時は 1MB。"),
+  maxFiles: z
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .optional()
+    .describe("assetId 解決時に探索するファイル数の上限。省略時は 5000。"),
   maxTables: z
     .number()
     .int()

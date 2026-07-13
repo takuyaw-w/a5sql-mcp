@@ -8,6 +8,7 @@ import type {
   A5sqlAssetKind,
   AssetRecord,
   ReadAssetOptions,
+  ReadAssetLookupResult,
   ReadAssetResult,
   SearchAssetsOptions,
   SearchAssetsResult,
@@ -143,38 +144,84 @@ export async function searchA5sqlAssetsWithMetadata(
 }
 
 export async function readA5sqlAsset(options: ReadAssetOptions): Promise<ReadAssetResult | null> {
+  return (await readA5sqlAssetWithMetadata(options)).result;
+}
+
+export async function readA5sqlAssetWithMetadata(
+  options: ReadAssetOptions,
+): Promise<ReadAssetLookupResult> {
   const maxBytes = clamp(options.maxBytes ?? DEFAULT_READ_BYTES, 1, 2 * 1024 * 1024);
+  const maxFiles = clamp(options.maxFiles ?? DEFAULT_MAX_FILES, 1, 100000);
   if (options.path) {
     if (!options.roots || options.roots.length === 0) {
-      return null;
+      return emptyReadLookupResult(maxFiles);
     }
     const filePath = path.resolve(options.path);
     const withinRoots = await isPathWithinRoots(filePath, options.roots);
     if (!withinRoots) {
-      return null;
+      return emptyReadLookupResult(maxFiles);
     }
-    return readAssetPath(filePath, stableAssetId(filePath), maxBytes);
+    return {
+      result: await readAssetPath(filePath, stableAssetId(filePath), maxBytes),
+      visitedFileCount: 0,
+      lookupTruncated: false,
+      cutoffReason: null,
+      maxFiles,
+    };
   }
 
   if (!options.assetId) {
-    return null;
+    return emptyReadLookupResult(maxFiles);
   }
 
   const roots = await resolveReadableRoots(options.roots);
+  let visitedFileCount = 0;
 
   for (const root of roots) {
     for await (const filePath of walkFiles(root, {
       includeHidden: true,
       maxDepth: DEFAULT_MAX_DEPTH,
     })) {
+      if (visitedFileCount >= maxFiles) {
+        return {
+          result: null,
+          visitedFileCount,
+          lookupTruncated: true,
+          cutoffReason: "max_files_reached",
+          maxFiles,
+        };
+      }
+      visitedFileCount += 1;
       if (stableAssetId(filePath) !== options.assetId) {
         continue;
       }
-      return readAssetPath(filePath, options.assetId, maxBytes);
+      return {
+        result: await readAssetPath(filePath, options.assetId, maxBytes),
+        visitedFileCount,
+        lookupTruncated: false,
+        cutoffReason: null,
+        maxFiles,
+      };
     }
   }
 
-  return null;
+  return {
+    result: null,
+    visitedFileCount,
+    lookupTruncated: false,
+    cutoffReason: null,
+    maxFiles,
+  };
+}
+
+function emptyReadLookupResult(maxFiles: number): ReadAssetLookupResult {
+  return {
+    result: null,
+    visitedFileCount: 0,
+    lookupTruncated: false,
+    cutoffReason: null,
+    maxFiles,
+  };
 }
 
 export function classifyAsset(filePath: string): A5sqlAssetKind {
@@ -283,6 +330,7 @@ async function readAssetPath(
       encoding: "binary_or_unsupported",
       truncated: false,
       bytesRead: 0,
+      sourceSizeBytes: fileStat.size,
       warnings: ["asset_content_not_returned_for_binary_or_unsupported_type"],
     };
   }
@@ -294,6 +342,7 @@ async function readAssetPath(
     encoding: decoded.encoding,
     truncated: decoded.truncated,
     bytesRead: decoded.bytesRead,
+    sourceSizeBytes: fileStat.size,
     warnings: decoded.encoding === "binary" ? ["binary_file_not_returned"] : [],
   };
 }

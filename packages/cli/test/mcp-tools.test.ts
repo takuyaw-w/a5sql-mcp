@@ -396,11 +396,15 @@ describe("A5:ER MCP tool helpers", () => {
       includedTables: string[];
       sql: string;
       warnings: string[];
+      warningDetails: Array<Record<string, unknown>>;
     };
 
     expect(output.includedTables).toEqual(["users"]);
     expect(output.sql).not.toContain("LEFT JOIN");
-    expect(output.warnings).toEqual(["related_table_filter_not_found:missing_table"]);
+    expect(output.warnings).toEqual(["related_table_filter_not_found"]);
+    expect(output.warningDetails).toEqual([
+      { code: "related_table_filter_not_found", tableName: "missing_table" },
+    ]);
   });
 
   it("generates Mermaid ER diagram text", async () => {
@@ -707,6 +711,7 @@ describe("A5:ER MCP tool helpers", () => {
       includeDestructive: boolean;
       operations: Array<{ destructive: boolean; kind: string }>;
       warnings: string[];
+      warningDetails: Array<Record<string, unknown>>;
     };
 
     expectDraftGenerationOutput(defaultOutput as Record<string, unknown>);
@@ -717,7 +722,12 @@ describe("A5:ER MCP tool helpers", () => {
     expect(defaultOutput.operations.map((operation) => operation.kind)).not.toContain(
       "drop_column",
     );
-    expect(defaultOutput.warnings).toContain("extra_live_column_skipped:users.legacy_token");
+    expect(defaultOutput.warnings).toContain("extra_live_column_skipped");
+    expect(defaultOutput.warningDetails).toContainEqual({
+      code: "extra_live_column_skipped",
+      tableName: "users",
+      columnName: "legacy_token",
+    });
 
     const destructiveOutput = generateMigrationPlan(parsed, {
       liveSchema: {
@@ -879,11 +889,18 @@ describe("A5:ER MCP tool helpers", () => {
       totalMatchedTableCount: number;
       truncated: boolean;
       warnings: string[];
+      warningDetails: Array<Record<string, unknown>>;
+      warningDetails: Array<Record<string, unknown>>;
     };
     expect(mermaid.tableCount).toBe(10);
     expect(mermaid.totalMatchedTableCount).toBe(240);
     expect(mermaid.truncated).toBe(true);
-    expect(mermaid.warnings).toContain("table_output_truncated:10/240");
+    expect(mermaid.warnings).toContain("table_output_truncated");
+    expect(mermaid.warningDetails).toContainEqual({
+      code: "table_output_truncated",
+      returnedTableCount: 10,
+      totalTableCount: 240,
+    });
 
     const models = generateModelFiles(parsed, {
       framework: "laravel",
@@ -894,13 +911,19 @@ describe("A5:ER MCP tool helpers", () => {
       truncated: boolean;
       files: Array<{ path: string }>;
       warnings: string[];
+      warningDetails: Array<Record<string, unknown>>;
     };
     expectDraftGenerationOutput(models as Record<string, unknown>);
     expect(models.tableCount).toBe(3);
     expect(models.totalMatchedTableCount).toBe(240);
     expect(models.files).toHaveLength(3);
     expect(models.truncated).toBe(true);
-    expect(models.warnings).toContain("table_output_truncated:3/240");
+    expect(models.warnings).toContain("table_output_truncated");
+    expect(models.warningDetails).toContainEqual({
+      code: "table_output_truncated",
+      returnedTableCount: 3,
+      totalTableCount: 240,
+    });
 
     const select = generateSqlSelect(parsed, {
       tableName: "table_000",
@@ -916,7 +939,12 @@ describe("A5:ER MCP tool helpers", () => {
     expect(select.relatedRelationshipCount).toBe(60);
     expect(select.includedTables).toHaveLength(6);
     expect(select.truncated).toBe(true);
-    expect(select.warnings).toContain("related_table_output_truncated:5/60");
+    expect(select.warnings).toContain("related_table_output_truncated");
+    expect(select.warningDetails).toContainEqual({
+      code: "related_table_output_truncated",
+      returnedTableCount: 5,
+      totalTableCount: 60,
+    });
 
     const slice = sliceFileText(source, {
       filePath,

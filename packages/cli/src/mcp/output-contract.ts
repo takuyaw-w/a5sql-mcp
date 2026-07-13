@@ -39,6 +39,8 @@ const UNTRUSTED_PAYLOAD_FIELD_CANDIDATES = [
   "baseTable",
   "includedTables",
   "parameters",
+  "connections",
+  "warningDetails",
 ] as const;
 
 const DRAFT_OUTPUT_FIELD_CANDIDATES = [

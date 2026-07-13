@@ -64,7 +64,12 @@ describe("parseA5sqlAsset", () => {
       expect(parsed?.encoding).toBe("UTF8");
       expect(parsed?.fileEncoding).toBe("shift_jis");
       expect(parsed?.tables?.[0]?.logicalName).toBe("ユーザー");
-      expect(parsed?.warnings).toContain("a5er_encoding_mismatch:UTF8:shift_jis");
+      expect(parsed?.warnings).toContain("a5er_encoding_mismatch");
+      expect(parsed?.warningDetails).toContainEqual({
+        code: "a5er_encoding_mismatch",
+        declaredEncoding: "UTF8",
+        decodedEncoding: "shift_jis",
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -128,8 +133,78 @@ describe("parseA5sqlAsset", () => {
 
       expect(parsed?.parseStatus).toBe("ok");
       expect(parsed?.summary).toBe("0 tables, 0 relationships");
-      expect(parsed?.warnings).toContain("table_missing_name:Entity");
+      expect(parsed?.warnings).toContain("table_missing_name");
+      expect(parsed?.warningDetails).toContainEqual({
+        code: "table_missing_name",
+        sectionName: "Entity",
+      });
       expect(JSON.stringify(parsed?.warnings)).not.toContain("ignore previous instructions");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not parse a truncated A5ER source as a complete schema", async () => {
+    const root = path.join(os.tmpdir(), `a5sql-mcp-core-parser-${randomUUID()}`);
+    try {
+      await mkdir(root, { recursive: true });
+      const filePath = path.join(root, "bounded.a5er");
+      await writeFile(
+        filePath,
+        [
+          "# A5:ER FORMAT:19",
+          "# A5:ER ENCODING:UTF8",
+          "[Entity]",
+          "PName=users",
+          'Field="ID","id","Integer","NOT NULL",0,"","",$FFFFFFFF,""',
+        ].join("\n"),
+        "utf8",
+      );
+
+      const parsed = await parseA5sqlAsset({
+        roots: [root],
+        assetId: stableAssetId(filePath),
+        maxBytes: 48,
+      });
+
+      expect(parsed).toMatchObject({
+        parser: "not-attempted",
+        sourceTruncated: true,
+        warnings: ["source_truncated"],
+      });
+      expect(parsed?.tables).toBeUndefined();
+      expect(parsed?.relationships).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports SQL totals independently from the returned statement limit", async () => {
+    const root = path.join(os.tmpdir(), `a5sql-mcp-core-parser-${randomUUID()}`);
+    try {
+      await mkdir(root, { recursive: true });
+      const filePath = path.join(root, "many.sql");
+      await writeFile(
+        filePath,
+        Array.from({ length: 101 }, (_, index) => `select ${index};`).join("\n"),
+        "utf8",
+      );
+
+      const parsed = await parseA5sqlAsset({
+        roots: [root],
+        assetId: stableAssetId(filePath),
+        maxStatements: 100,
+      });
+
+      expect(parsed).toMatchObject({
+        parser: "sql-heuristic",
+        totalStatementCount: 101,
+        returnedStatementCount: 100,
+        statementsTruncated: true,
+        sourceTruncated: false,
+        trailingStatementMayBeIncomplete: false,
+      });
+      expect(parsed?.statements).toHaveLength(100);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

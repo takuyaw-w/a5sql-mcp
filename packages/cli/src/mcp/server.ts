@@ -60,13 +60,14 @@ import {
   type ToolProfile,
 } from "./tool-profiles.js";
 import type { ParsedFileLoader } from "./types.js";
+import { createToolObserverFromEnvironment, type ToolObserver } from "./observability.js";
 
 export type McpServerOptions = {
   fileArg: string;
   toolProfile?: ToolProfile;
 };
 
-export const A5SQL_MCP_SERVER_VERSION = "0.10.1";
+export const A5SQL_MCP_SERVER_VERSION = "0.10.2";
 
 type ToolRegistrationConfig<
   OutputArgs extends ZodRawShapeCompat | AnySchema,
@@ -84,10 +85,8 @@ export async function runMcpServer({
 }: McpServerOptions): Promise<void> {
   const server = await createA5sqlMcpServer({ fileArg, toolProfile });
   const transport = new StdioServerTransport();
-  transport.onerror = (error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`a5sql-mcp transport error: ${message}`);
-  };
+  const observer = createToolObserverFromEnvironment();
+  transport.onerror = () => observer?.writeTransportError();
   await server.connect(transport);
   process.stdin.resume();
 
@@ -114,6 +113,7 @@ export async function createA5sqlMcpServer({
     name: "a5sql-mcp",
     version: A5SQL_MCP_SERVER_VERSION,
   });
+  const observer = createToolObserverFromEnvironment();
   const registerProfiledTool = <
     OutputArgs extends ZodRawShapeCompat | AnySchema,
     InputArgs extends undefined | ZodRawShapeCompat | AnySchema = undefined,
@@ -123,7 +123,11 @@ export async function createA5sqlMcpServer({
     handler: ToolCallback<InputArgs>,
   ) => {
     if (shouldRegisterToolForProfile(toolName, toolProfile)) {
-      server.registerTool(toolName, toolConfig, handler);
+      server.registerTool(
+        toolName,
+        toolConfig,
+        observer ? observer.wrap(toolName, handler) : handler,
+      );
     }
   };
 
@@ -216,7 +220,7 @@ export async function createA5sqlMcpServer({
   );
 
   if (initialFile.kind === "a5er") {
-    registerA5erTools(server, getParsedFile, toolProfile);
+    registerA5erTools(server, getParsedFile, toolProfile, observer);
   }
 
   return server;
@@ -246,6 +250,7 @@ function registerA5erTools(
   server: McpServer,
   getParsedFile: ParsedFileLoader,
   toolProfile: ToolProfile,
+  observer?: ToolObserver,
 ): void {
   const registerProfiledTool = <
     OutputArgs extends ZodRawShapeCompat | AnySchema,
@@ -256,7 +261,11 @@ function registerA5erTools(
     handler: ToolCallback<InputArgs>,
   ) => {
     if (shouldRegisterToolForProfile(toolName, toolProfile)) {
-      server.registerTool(toolName, toolConfig, handler);
+      server.registerTool(
+        toolName,
+        toolConfig,
+        observer ? observer.wrap(toolName, handler) : handler,
+      );
     }
   };
 

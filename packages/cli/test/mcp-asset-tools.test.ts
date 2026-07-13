@@ -371,12 +371,35 @@ describe("A5:SQL asset MCP tools", () => {
 
     expect(result.structuredContent).toMatchObject({
       found: false,
-      assetId: "does-not-exist",
       code: "asset_not_found",
     });
+    expect(result.structuredContent).not.toHaveProperty("assetId");
     expect(serialized).not.toContain(uniqueSecret);
     expect(serialized).not.toContain(sqlPath);
     expect(serialized).not.toContain(root);
+  });
+
+  it("distinguishes a bounded asset lookup cutoff from a confirmed miss", async () => {
+    const root = await makeTempDir();
+    await writeFile(path.join(root, "one.sql"), "select 1;", "utf8");
+    await writeFile(path.join(root, "two.sql"), "select 2;", "utf8");
+
+    const { createReadA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createReadA5sqlAssetHandler!()({
+      roots: [root],
+      assetId: "does-not-exist",
+      maxFiles: 1,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: false,
+      code: "asset_lookup_truncated",
+      retryable: true,
+      visitedFileCount: 1,
+      lookupTruncated: true,
+      cutoffReason: "max_files_reached",
+      maxFiles: 1,
+    });
   });
 
   it("does not follow explicit path symlinks outside provided roots", async () => {
@@ -455,7 +478,9 @@ describe("A5:SQL asset MCP tools", () => {
       totalConnectionCount: 1,
       returnedConnectionCount: 1,
       truncated: false,
+      contentIsUntrusted: true,
     });
+    expect(result.structuredContent.untrustedPayloadFields).toContain("connections");
     expect(result.structuredContent.connections).toEqual([
       expect.objectContaining({
         sourceName: "connections.ini",
@@ -580,7 +605,10 @@ describe("A5:SQL asset MCP tools", () => {
     expect(result.structuredContent).toMatchObject({
       found: true,
       parser: "sql-heuristic",
-      summary: "1 SQL statements",
+      summary: "1 SQL statements in the bounded source read",
+      totalStatementCount: 1,
+      returnedStatementCount: 1,
+      statementsTruncated: false,
     });
     expect(result.structuredContent.asset).toMatchObject({
       kind: "sql",
@@ -592,6 +620,52 @@ describe("A5:SQL asset MCP tools", () => {
         referencedTables: ["users"],
       }),
     ]);
+  });
+
+  it("reports SQL statement totals without the former 100 statement cap", async () => {
+    const root = await makeTempDir();
+    const sqlPath = path.join(root, "many.sql");
+    await writeFile(
+      sqlPath,
+      Array.from({ length: 101 }, (_, index) => `select ${index};`).join("\n"),
+      "utf8",
+    );
+
+    const { createParseA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createParseA5sqlAssetHandler!()({
+      roots: [root],
+      assetId: stableAssetId(sqlPath),
+      maxStatements: 100,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      totalStatementCount: 101,
+      returnedStatementCount: 100,
+      statementsTruncated: true,
+    });
+    expect(result.structuredContent.statements).toHaveLength(100);
+  });
+
+  it("fails closed when a bounded A5ER read is incomplete", async () => {
+    const root = await makeTempDir();
+    const a5erPath = path.join(root, "large.a5er");
+    await writeFile(a5erPath, `[Manager]\nEncoding=UTF8\n${"x".repeat(4096)}`, "utf8");
+
+    const { createParseA5sqlAssetHandler } = await loadAssetHandlers();
+    const result = await createParseA5sqlAssetHandler!()({
+      roots: [root],
+      assetId: stableAssetId(a5erPath),
+      maxBytes: 128,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      found: true,
+      code: "source_truncated",
+      retryable: true,
+      sourceTruncated: true,
+      warnings: expect.arrayContaining(["source_truncated"]),
+    });
+    expect(result.structuredContent).not.toHaveProperty("tables");
   });
 
   it("returns trusted guidance for unrecognized hostile A5ER asset parses", async () => {
@@ -657,7 +731,13 @@ describe("A5:SQL asset MCP tools", () => {
       encoding: "UTF8",
       fileEncoding: "shift_jis",
     });
-    expect(result.structuredContent.warnings).toContain("a5er_encoding_mismatch:UTF8:shift_jis");
+    expect(result.structuredContent.warnings).toContain("a5er_encoding_mismatch");
+    expect(result.structuredContent.warningDetails).toContainEqual({
+      code: "a5er_encoding_mismatch",
+      declaredEncoding: "UTF8",
+      decodedEncoding: "shift_jis",
+    });
+    expect(result.structuredContent.untrustedPayloadFields).toContain("warningDetails");
     expect(result.structuredContent.nextAction).toContain("read_a5sql_asset");
     expect(result.structuredContent.trustedMetadataFields).toEqual(
       expect.arrayContaining(["warnings", "nextAction"]),

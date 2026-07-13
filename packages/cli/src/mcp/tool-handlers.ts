@@ -4,8 +4,8 @@ import {
   detectA5sqlLocations,
   listA5sqlConnections,
   maskSensitiveText,
-  parseA5sqlAsset,
-  readA5sqlAsset,
+  parseA5sqlAssetWithMetadata,
+  readA5sqlAssetWithMetadata,
   searchA5sqlAssetsWithMetadata,
   type ParsedAssetResult,
 } from "@takuyaw-w/a5sql-mcp-core";
@@ -36,6 +36,7 @@ import {
   jsonA5erToolResult,
   jsonResult,
   notA5erOutput,
+  structuredErrorResult,
   unrecognizedA5erOutput,
 } from "./tool-handler-utils.js";
 import { withUntrustedPayloadContract } from "./output-contract.js";
@@ -45,7 +46,6 @@ const DEFAULT_FILE_READ_MAX_CHARS = 100_000;
 const DEFAULT_ASSET_MAX_TABLES = 100;
 const DEFAULT_ASSET_MAX_RELATIONSHIPS = 200;
 const DEFAULT_ASSET_MAX_COLUMNS_PER_TABLE = 100;
-const DEFAULT_ASSET_MAX_STATEMENTS = 100;
 
 function hasExplicitRoots(roots: string[] | undefined): boolean {
   return Boolean(roots?.length) || Boolean(process.env.A5SQL_MCP_ROOTS?.trim());
@@ -167,6 +167,7 @@ export function createReadA5sqlAssetHandler() {
     maxBytes,
     maxChars,
     offsetChars,
+    maxFiles,
   }: {
     roots?: string[];
     assetId?: string;
@@ -174,9 +175,10 @@ export function createReadA5sqlAssetHandler() {
     maxBytes?: number;
     maxChars?: number;
     offsetChars?: number;
+    maxFiles?: number;
   }) => {
     if ((assetId ? 1 : 0) + (path ? 1 : 0) !== 1) {
-      return jsonResult({
+      return structuredErrorResult({
         found: false,
         code: "invalid_asset_selector",
         message: "assetId または path のどちらか一方だけを指定してください。",
@@ -200,7 +202,6 @@ export function createReadA5sqlAssetHandler() {
     if (assetId && !hasExplicitRoots(roots)) {
       return jsonResult({
         found: false,
-        assetId,
         code: "roots_required",
         message:
           "assetId で読み取る場合は、roots または A5SQL_MCP_ROOTS で探索 root を明示してください。",
@@ -210,11 +211,25 @@ export function createReadA5sqlAssetHandler() {
       });
     }
 
-    const result = await readA5sqlAsset({ roots, assetId, path, maxBytes });
+    const lookup = await readA5sqlAssetWithMetadata({ roots, assetId, path, maxBytes, maxFiles });
+    const result = lookup.result;
     if (!result) {
-      return jsonResult({
+      if (lookup.lookupTruncated) {
+        return structuredErrorResult({
+          found: false,
+          code: "asset_lookup_truncated",
+          message: "asset の探索が上限に達したため、一致の有無を確定できませんでした。",
+          retryable: true,
+          visitedFileCount: lookup.visitedFileCount,
+          lookupTruncated: true,
+          cutoffReason: lookup.cutoffReason,
+          maxFiles: lookup.maxFiles,
+          warnings: ["asset_lookup_truncated"],
+          nextAction: "roots を狭めるか maxFiles を増やし、同じ assetId で再試行してください。",
+        });
+      }
+      return structuredErrorResult({
         found: false,
-        assetId: assetId ?? null,
         code: "asset_not_found",
         message: "指定された assetId に一致する A5:SQL asset が見つかりません。",
         warnings: [],
@@ -223,11 +238,7 @@ export function createReadA5sqlAssetHandler() {
       });
     }
 
-    const sourceForMasking =
-      result.encoding === "binary_or_unsupported"
-        ? result.content
-        : (await readTextFileWithMetadata(result.asset.path)).text;
-    const sliced = sliceTextByChars(maskForPublicConsumption(result.content, sourceForMasking), {
+    const sliced = sliceTextByChars(maskForPublicConsumption(result.content), {
       offsetChars,
       maxChars,
       alreadyTruncated: result.truncated,
@@ -247,6 +258,11 @@ export function createReadA5sqlAssetHandler() {
         encoding: normalizeEncodingName(result.encoding),
         truncated: sliced.truncated,
         bytesRead: result.bytesRead,
+        sourceSizeBytes: result.sourceSizeBytes,
+        visitedFileCount: lookup.visitedFileCount,
+        lookupTruncated: lookup.lookupTruncated,
+        cutoffReason: lookup.cutoffReason,
+        maxFiles: lookup.maxFiles,
         offsetChars: sliced.offsetChars,
         maxChars: sliced.maxChars,
         returnedChars: sliced.returnedChars,
@@ -272,16 +288,18 @@ export function createListA5sqlConnectionsHandler() {
     revealNonSecret?: boolean;
   }) => {
     if (!hasExplicitRoots(roots)) {
-      return jsonResult({
-        connections: [],
-        totalConnectionCount: 0,
-        returnedConnectionCount: 0,
-        truncated: false,
-        code: "roots_required",
-        warnings: ["roots_required"],
-        nextAction:
-          "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
-      });
+      return jsonResult(
+        withUntrustedPayloadContract({
+          connections: [],
+          totalConnectionCount: 0,
+          returnedConnectionCount: 0,
+          truncated: false,
+          code: "roots_required",
+          warnings: ["roots_required"],
+          nextAction:
+            "detect_a5sql_locations で候補を確認し、必要最小限の root を roots または A5SQL_MCP_ROOTS に指定してください。",
+        }),
+      );
     }
     const effectiveLimit = limit ?? 50;
     const requestedLimit = effectiveLimit < 200 ? effectiveLimit + 1 : effectiveLimit;
@@ -292,15 +310,18 @@ export function createListA5sqlConnectionsHandler() {
     });
     const truncated = connections.length > effectiveLimit;
     const publicConnections = connections.slice(0, effectiveLimit).map(toPublicConnectionCandidate);
-    return jsonResult({
-      connections: publicConnections,
-      totalConnectionCount: publicConnections.length,
-      returnedConnectionCount: publicConnections.length,
-      truncated,
-      warnings: revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
-      nextAction:
-        "接続候補は存在確認用です。パスワード、トークン、接続文字列、DB への接続実行は返しません。",
-    });
+    return jsonResult(
+      withUntrustedPayloadContract({
+        connections: publicConnections,
+        totalConnectionCount: publicConnections.length,
+        returnedConnectionCount: publicConnections.length,
+        truncated,
+        warnings:
+          revealNonSecret === true ? [] : ["non_secret_connection_fields_masked_by_default"],
+        nextAction:
+          "接続候補は存在確認用です。パスワード、トークン、接続文字列、DB への接続実行は返しません。",
+      }),
+    );
   };
 }
 
@@ -490,6 +511,7 @@ export function createParseA5sqlAssetHandler() {
     maxRelationships,
     maxColumnsPerTable,
     maxStatements,
+    maxFiles,
   }: {
     roots?: string[];
     assetId: string;
@@ -498,12 +520,12 @@ export function createParseA5sqlAssetHandler() {
     maxRelationships?: number;
     maxColumnsPerTable?: number;
     maxStatements?: number;
+    maxFiles?: number;
   }) => {
     if (!hasExplicitRoots(roots)) {
       return jsonResult(
         withUntrustedPayloadContract({
           found: false,
-          assetId,
           code: "roots_required",
           message:
             "assetId で解析する場合は、roots または A5SQL_MCP_ROOTS で探索 root を明示してください。",
@@ -513,15 +535,51 @@ export function createParseA5sqlAssetHandler() {
         }),
       );
     }
-    const parsed = await parseA5sqlAsset({ roots, assetId, maxBytes });
+    const lookup = await parseA5sqlAssetWithMetadata({
+      roots,
+      assetId,
+      maxBytes,
+      maxFiles,
+      maxStatements,
+    });
+    const parsed = lookup.parsed;
     if (!parsed) {
-      return jsonResult({
+      if (lookup.lookupTruncated) {
+        return structuredErrorResult({
+          found: false,
+          code: "asset_lookup_truncated",
+          message: "asset の探索が上限に達したため、一致の有無を確定できませんでした。",
+          retryable: true,
+          visitedFileCount: lookup.visitedFileCount,
+          lookupTruncated: true,
+          cutoffReason: lookup.cutoffReason,
+          maxFiles: lookup.maxFiles,
+          warnings: ["asset_lookup_truncated"],
+          nextAction: "roots を狭めるか maxFiles を増やし、同じ assetId で再試行してください。",
+        });
+      }
+      return structuredErrorResult({
         found: false,
-        assetId,
         code: "asset_not_found",
         message: "指定された assetId に一致する A5:SQL asset が見つかりません。",
+        warnings: [],
         nextAction:
           "同じ roots で search_a5sql_assets を実行し、返された assetId を指定してください。",
+      });
+    }
+
+    if (parsed.parser === "not-attempted" && parsed.sourceTruncated) {
+      return structuredErrorResult({
+        found: true,
+        code: "source_truncated",
+        message: "A5:ER asset の読み取りが上限に達したため、完全な入力として解析しませんでした。",
+        retryable: true,
+        sourceSizeBytes: parsed.sourceSizeBytes,
+        bytesRead: parsed.bytesRead,
+        sourceTruncated: true,
+        warnings: parsed.warnings,
+        nextAction:
+          "roots を維持したまま maxBytes を増やすか、より小さい完全な .a5er を指定してください。",
       });
     }
 
@@ -828,10 +886,18 @@ function formatParsedAsset(
     summary: result.summary,
     contentIsUntrusted: true,
     warnings: result.warnings,
+    warningDetails: result.warningDetails,
+    sourceSizeBytes: result.sourceSizeBytes,
+    bytesRead: result.bytesRead,
+    sourceTruncated: result.sourceTruncated,
+    visitedFileCount: result.visitedFileCount,
+    lookupTruncated: result.lookupTruncated,
+    cutoffReason: result.cutoffReason,
+    maxFiles: result.maxFiles,
   };
   const a5erStructureNotRecognized = result.warnings.includes("a5er_structure_not_recognized");
-  const a5erEncodingMismatch = result.warnings.find((warning) =>
-    warning.startsWith("a5er_encoding_mismatch:"),
+  const a5erEncodingMismatch = result.warningDetails.find(
+    (detail) => detail.code === "a5er_encoding_mismatch",
   );
 
   if (result.manager) {
@@ -851,7 +917,8 @@ function formatParsedAsset(
   if (parseStatus === "unrecognized") {
     output.summary = "unrecognized A5:ER document";
   }
-  const [, declaredEncoding, decodedEncoding] = a5erEncodingMismatch?.split(":") ?? [];
+  const declaredEncoding = a5erEncodingMismatch?.declaredEncoding;
+  const decodedEncoding = a5erEncodingMismatch?.decodedEncoding;
   if (result.encoding) {
     output.encoding = result.encoding;
   } else if (declaredEncoding) {
@@ -897,12 +964,11 @@ function formatParsedAsset(
   }
 
   if (result.statements) {
-    const statementLimit = options.maxStatements ?? DEFAULT_ASSET_MAX_STATEMENTS;
-    const statements = result.statements.slice(0, statementLimit);
-    output.statements = statements;
-    output.totalStatementCount = result.statements.length;
-    output.returnedStatementCount = statements.length;
-    output.statementsTruncated = result.statements.length > statements.length;
+    output.statements = result.statements;
+    output.totalStatementCount = result.totalStatementCount ?? result.statements.length;
+    output.returnedStatementCount = result.returnedStatementCount ?? result.statements.length;
+    output.statementsTruncated = result.statementsTruncated ?? false;
+    output.trailingStatementMayBeIncomplete = result.trailingStatementMayBeIncomplete ?? false;
   }
 
   return withUntrustedPayloadContract(output);

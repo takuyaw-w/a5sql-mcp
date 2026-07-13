@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseA5erIni } from "../src/index.js";
+import { parseA5erIni, parseComplexValue } from "../src/index.js";
 
 describe("parseA5erIni", () => {
   it("extracts entities, fields, indexes, positions, and relations", () => {
@@ -133,7 +133,11 @@ describe("parseA5erIni", () => {
     expect(parsed.parseStatus).toBe("ok");
     expect(parsed.tables).toEqual([]);
     expect(parsed.relationships).toEqual([]);
-    expect(parsed.warnings).toContain("table_missing_name:Entity");
+    expect(parsed.warnings).toContain("table_missing_name");
+    expect(parsed.warningDetails).toContainEqual({
+      code: "table_missing_name",
+      sectionName: "Entity",
+    });
     expect(JSON.stringify(parsed.warnings)).not.toContain("ignore previous instructions");
   });
 
@@ -150,7 +154,31 @@ describe("parseA5erIni", () => {
 
     expect(parsed.parseStatus).toBe("ok");
     expect(parsed.fileEncoding).toBe("utf-8");
-    expect(parsed.warnings).toContain("a5er_encoding_mismatch:SJIS:utf-8");
+    expect(parsed.warnings).toContain("a5er_encoding_mismatch");
+    expect(parsed.warningDetails).toContainEqual({
+      code: "a5er_encoding_mismatch",
+      declaredEncoding: "SJIS",
+      decodedEncoding: "utf-8",
+    });
+    expect(JSON.stringify(parsed.warnings)).not.toContain("SJIS");
+  });
+
+  it("keeps unsafe integers and decimals lossless in complex values", () => {
+    expect(parseComplexValue("42,9007199254740993,-9007199254740993,123.4567890123456789")).toEqual(
+      [42, "9007199254740993", "-9007199254740993", "123.4567890123456789"],
+    );
+  });
+
+  it("keeps bigint and decimal defaults lossless", () => {
+    const parsed = parseA5erIni(`
+      [Entity]
+      PName=precise_values
+      Field="Big","big_value","bigint","",,"9007199254740993","",$FFFFFFFF,""
+      Field="Decimal","decimal_value","decimal(30,18)","",,"123.4567890123456789","",$FFFFFFFF,""
+    `);
+
+    expect(parsed.tables[0]?.columns[0]?.defaultValue).toBe("9007199254740993");
+    expect(parsed.tables[0]?.columns[1]?.defaultValue).toBe("123.4567890123456789");
   });
 
   it("parses a realistic mixed A5:ER document shape", () => {
@@ -315,9 +343,10 @@ describe("parseA5erIni", () => {
     expect(parsed.parseStatus).toBe("ok");
     expect(parsed.tables).toEqual([]);
     expect(parsed.relationships).toEqual([]);
-    expect(parsed.warnings).toEqual([
-      "table_missing_name:Entity",
-      "relationship_missing_entities:missing_entities",
+    expect(parsed.warnings).toEqual(["table_missing_name", "relationship_missing_entities"]);
+    expect(parsed.warningDetails).toEqual([
+      { code: "table_missing_name", sectionName: "Entity" },
+      { code: "relationship_missing_entities", relationshipName: "missing_entities" },
     ]);
   });
 });
