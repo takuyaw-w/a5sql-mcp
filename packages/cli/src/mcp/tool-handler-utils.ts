@@ -4,7 +4,7 @@ import type { A5erCliResult, JsonObject, ParsedFileLoader } from "./types.js";
 
 export function jsonResult<T extends JsonObject>(output: T) {
   const structuredOutput = {
-    schemaVersion: "0.10.4",
+    schemaVersion: "0.10.5",
     resultType: classifyResultType(output),
     ...output,
   };

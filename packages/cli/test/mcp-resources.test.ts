@@ -145,7 +145,7 @@ describe("MCP Resource Gateway pilot", () => {
     await withClient(filePath, async (client) => {
       const fileSummary = await readJsonResource(client, "a5sql://configured-file/summary");
       expect(fileSummary).toMatchObject({
-        schemaVersion: "0.10.4",
+        schemaVersion: "0.10.5",
         resultType: "configured_file_summary_resource",
         kind: "a5er",
         readOnly: true,
@@ -161,7 +161,7 @@ describe("MCP Resource Gateway pilot", () => {
         "a5sql://configured-file/schema-summary",
       );
       expect(schemaSummary).toMatchObject({
-        schemaVersion: "0.10.4",
+        schemaVersion: "0.10.5",
         resultType: "configured_schema_summary_resource",
         kind: "a5er",
         tableCount: 21,
@@ -194,7 +194,7 @@ describe("MCP Resource Gateway pilot", () => {
       await unlink(filePath);
       const unavailable = await readJsonResource(client, "a5sql://configured-file/summary");
       expect(unavailable).toEqual({
-        schemaVersion: "0.10.4",
+        schemaVersion: "0.10.5",
         resultType: "resource_error",
         code: "configured_file_unavailable",
         message: "起動時に指定されたファイルを読み取れませんでした。",

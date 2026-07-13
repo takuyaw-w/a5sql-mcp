@@ -11,7 +11,7 @@ import type { JsonObject, ParsedFileLoader } from "./types.js";
 export const CONFIGURED_FILE_SUMMARY_RESOURCE_URI = "a5sql://configured-file/summary";
 export const CONFIGURED_SCHEMA_SUMMARY_RESOURCE_URI = "a5sql://configured-file/schema-summary";
 
-const RESOURCE_SCHEMA_VERSION = "0.10.4";
+const RESOURCE_SCHEMA_VERSION = "0.10.5";
 const RESOURCE_MIME_TYPE = "application/json";
 const SCHEMA_SUMMARY_LIMIT = 20;
 

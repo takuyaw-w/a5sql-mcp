@@ -135,14 +135,14 @@ describe("A5:SQL asset MCP tools", () => {
       tableName: "users",
     });
     const expectedTablesOutput = {
-      schemaVersion: "0.10.4",
+      schemaVersion: "0.10.5",
       resultType: "success",
       filePath: sqlPath,
       kind: "sql",
       tables: [],
     };
     const expectedConfiguredFileIsNotA5erOutput = {
-      schemaVersion: "0.10.4",
+      schemaVersion: "0.10.5",
       resultType: "not_found",
       found: false,
       filePath: sqlPath,
