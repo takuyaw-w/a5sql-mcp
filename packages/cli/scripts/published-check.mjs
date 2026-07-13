@@ -328,7 +328,7 @@ async function assertPublishedResources(client, sampleA5er) {
 
   const fileSummary = await readJsonResource(client, "a5sql://configured-file/summary");
   assertObjectIncludes("configured file resource", fileSummary, {
-    schemaVersion: "0.10.4",
+    schemaVersion: "0.10.5",
     resultType: "configured_file_summary_resource",
     kind: "a5er",
     readOnly: true,
@@ -340,7 +340,7 @@ async function assertPublishedResources(client, sampleA5er) {
 
   const schemaSummary = await readJsonResource(client, "a5sql://configured-file/schema-summary");
   assertObjectIncludes("configured schema resource", schemaSummary, {
-    schemaVersion: "0.10.4",
+    schemaVersion: "0.10.5",
     resultType: "configured_schema_summary_resource",
     kind: "a5er",
     contentIsUntrusted: true,
